@@ -20,7 +20,7 @@ Chưa có MSSV, họ tên đầy đủ hoặc GitHub username nên để bổ su
 
 ## Thứ tự nên làm
 
-| Ưu tiên | Chức năng | Thắng phụ trách | Đức phụ trách | Tiêu chí hoàn thành |
+| Ưu tiên | Chức năng | Đức phụ trách | Thắng phụ trách | Tiêu chí hoàn thành |
 |---|---|---|---|---|
 | P0 · bước 1 | Chạy và hiểu base | Đọc TCP ingestion, ORM, migration; chạy publisher | Chạy React, quan sát WS trong DevTools | Cả hai tự chạy Docker demo; giải thích được TCP khác WebSocket |
 | P0 · bước 2 | Dữ liệu thật | Viết adapter Open-Meteo hoặc provider đã chọn; timeout, retry, chuẩn hóa đơn vị, timestamp UTC | Hiện nguồn, giờ cập nhật, trạng thái dữ liệu cũ/lỗi | Có dữ liệu thật vào DB và WS; lỗi provider không làm server chết; không giả dữ liệu thật |
