@@ -1,0 +1,55 @@
+name: weather-stream
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-weather}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-weather}
+      POSTGRES_DB: ${POSTGRES_DB:-weather}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - weather_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  server:
+    build: ./source/server
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weather:weather@db:5432/weather}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:5173","http://localhost:8080"]}'
+      TCP_HOST: 0.0.0.0
+      TCP_PORT: 9000
+      ENABLE_TCP: "true"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+      - "127.0.0.1:${TCP_PORT:-9000}:9000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  client:
+    build: ./source/client
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+  simulator:
+    image: python:3.12-slim
+    profiles: [demo]
+    volumes:
+      - ./source/scripts:/scripts:ro
+    command: ["python", "/scripts/publish_weather.py", "--host", "server"]
+    depends_on:
+      server:
+        condition: service_healthy
+volumes:
+  weather_data:

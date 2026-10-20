@@ -1,0 +1,2 @@
+event_id,city,temperature,humidity,wind_speed,rainfall,source,observed_at
+8d24e03b-908a-4a0b-b38f-5a5b3a0b790c,hanoi,36,80,55,25,simulator,2026-10-20T05:00:00Z
