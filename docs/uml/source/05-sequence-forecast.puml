@@ -1,0 +1,60 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title UC05 — Dự báo AI và fallback có nhãn (thiết kế đích)
+actor "Người xem" as U
+participant "React Client" as C
+participant "Forecast API" as API
+participant "Forecast Service" as F
+database "PostgreSQL / Neon" as DB
+participant "Active Model Predictor" as AI
+participant "Persistence Baseline" as B
+U -> C: Xem dự báo 1 giờ
+C -> API: GET forecast(location, source)
+API -> F: forecast(location, source, horizon=1h)
+F -> DB: Đọc quan sát đến cutoff + model active + cache
+DB --> F: Window, watermark, model metadata
+alt Chưa có quan sát hợp lệ
+  F --> API: unavailable
+  API --> C: Chưa đủ dữ liệu để dự báo
+else Có forecast cache còn hiệu lực theo watermark và version
+  F --> API: Forecast đã lưu + generatedAt/targetAt
+  API --> C: Hiển thị forecast còn hiệu lực
+else Cần tạo forecast
+  alt Window đủ, dữ liệu fresh, model sẵn sàng
+    F -> AI: predict(window trước cutoff)
+    alt Inference thành công và output hợp lệ
+      AI --> F: Nhiệt độ dự báo
+      F -> F: method=trained_model; isAI=true; modelVersion
+    else Inference lỗi / timeout / output sai
+      F -> B: predict(last observation)
+      B --> F: Giá trị giữ nguyên
+      F -> F: isAI=false; fallbackReason=model_error
+    end
+  else Thiếu mẫu / dữ liệu stale / model chưa sẵn sàng
+    F -> B: predict(last observation)
+    B --> F: Giá trị giữ nguyên
+    F -> F: isAI=false; ghi fallbackReason và freshness
+  end
+  F -> DB: Lưu Forecast + lineage + version nếu có
+  DB --> F: Forecast ID
+  F --> API: Forecast + method + targetAt + metadata
+  API --> C: Response có nhãn phương pháp rõ ràng
+end
+C --> U: Hiển thị kết quả / fallback / unavailable
+note over F,AI
+Train/evaluate là tác vụ offline do người vận hành kích hoạt.
+Không train trong GET request; không tự gọi LLM để bịa số liệu.
+Base hiện tại chỉ có PersistenceForecast và chưa lưu forecast.
+end note
+@enduml

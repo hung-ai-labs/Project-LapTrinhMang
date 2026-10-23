@@ -14,6 +14,13 @@ giữ `source/client`, `source/server`, `statics` và nguyên bản `INSTRUCTION
 Tên nhóm và chủ đề đăng ký chính thức: **cần bổ sung**.
 Chi tiết chức năng cần làm trước và tiêu chí hoàn thành: [Kế hoạch và phân công](docs/KE_HOACH_VA_PHAN_CONG.md).
 
+## Tài liệu phân tích và thiết kế
+
+- [Phân tích nghiệp vụ BA: phạm vi, yêu cầu, use case, quy tắc và nghiệm thu](docs/01_PHAN_TICH_NGHIEP_VU.md).
+- [Bộ UML: 9 sơ đồ, nguồn PlantUML và ảnh PNG/SVG](docs/02_THIET_KE_UML.md).
+
+Đây là thiết kế MVP đề xuất để review trước khi phát triển tiếp; các chức năng/bảng mới trong thiết kế chưa được triển khai.
+
 ## Mô tả hệ thống
 
 ```mermaid

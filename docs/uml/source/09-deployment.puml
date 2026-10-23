@@ -1,0 +1,55 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title Weather Stream — Deployment Diagram MVP đề xuất
+node "Máy người dùng" as Device {
+  artifact "Trình duyệt + React" as Browser
+}
+node "Máy demo / Docker Host" as Host {
+  node "Docker network: weather-stream" {
+    node "client container" as Client {
+      artifact "Nginx + React build" as Web
+    }
+    node "server container" as Server {
+      artifact "Uvicorn / FastAPI\n1 worker\nREST + WS :8000\nTCP listener :9000" as App
+      artifact "Model artifact\nversioned / read-only" as Model
+    }
+    node "simulator hoặc collector container" as Producer {
+      artifact "Python TCP Producer" as Pub
+    }
+    node "db container (local option)" as LocalDB {
+      database "PostgreSQL :5432" as PG
+    }
+  }
+}
+cloud "Neon Cloud (cloud option)" as NeonCloud {
+  database "Neon PostgreSQL / Pooler" as Neon
+}
+cloud "Nhà cung cấp khí tượng" as Weather {
+  artifact "HTTPS API" as WeatherAPI
+}
+Browser --> Web : HTTP :8080 ở local demo
+Web --> App : HTTP / WS nội bộ :8000
+Pub --> App : TCP NDJSON + ACK nội bộ :9000
+Pub --> WeatherAPI : HTTPS :443\nchỉ collector thật
+App --> Neon : PostgreSQL + TLS :5432\nDATABASE_URL dùng Neon
+App ..> PG : Tùy chọn thay thế Neon\nDATABASE_URL local
+App --> Model : Nạp model đang active
+note bottom of Host
+Cổng publish host bind 127.0.0.1 trong base.
+TCP chưa có TLS/auth: chỉ local hoặc mạng tin cậy.
+Triển khai Internet cần HTTPS/WSS và bảo vệ producer.
+Chỉ chọn một DB runtime bằng DATABASE_URL;
+Compose hiện vẫn tạo db container khi runtime dùng Neon.
+end note
+@enduml

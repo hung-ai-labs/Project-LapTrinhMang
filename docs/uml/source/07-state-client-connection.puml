@@ -1,0 +1,41 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title React Client — State Machine kết nối realtime
+[*] --> Idle
+Idle --> Connecting : Chọn địa điểm + nguồn
+Connecting --> Syncing : WS accepted / buffer live
+Connecting --> Reconnecting : Kết nối thất bại
+Syncing --> Live : Snapshot/history merged
+Syncing --> SyncError : REST resync thất bại
+SyncError --> Syncing : Retry resync, WS còn mở
+SyncError --> Reconnecting : WS đóng
+Live --> Reconnecting : WS đóng hoặc heartbeat timeout
+Live --> Syncing : Phát hiện gap / yêu cầu resync
+Reconnecting --> Connecting : Hết backoff
+Reconnecting --> Idle : Hủy theo dõi
+Syncing --> Idle : Đổi địa điểm / hủy tác vụ cũ
+Live --> Idle : Đổi địa điểm / hủy tác vụ cũ
+Connecting --> Idle : Đổi địa điểm / hủy tác vụ cũ
+SyncError --> Idle : Đổi địa điểm / hủy tác vụ cũ
+note right of Live
+Live chỉ mô tả kết nối.
+Fresh / stale / empty là trạng thái dữ liệu độc lập.
+WS online không có nghĩa dữ liệu còn mới.
+end note
+note bottom of Reconnecting
+Backoff tối đa 15 giây.
+Giữ dữ liệu cuối, hiển thị mất kết nối.
+Không giữ subscription địa điểm cũ.
+end note
+@enduml

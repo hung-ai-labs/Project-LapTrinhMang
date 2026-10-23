@@ -1,0 +1,56 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title UC04 — Vòng đời một đợt cảnh báo (thiết kế đích)
+start
+:Nhận quan sát đã validate trong transaction;
+if (Mới hơn watermark của địa điểm + nguồn?) then (Có)
+  if (Dữ liệu còn fresh?) then (Có)
+    :Lấy rule enabled và active episode;
+    :So sánh metric với ngưỡng rule;
+    if (Vượt ngưỡng?) then (Có)
+      if (Đã có active episode?) then (Có)
+        :Cập nhật lastEvaluatedAt và giá trị mới nhất;
+      else (Chưa)
+        :Mở episode active; lưu rule snapshot;
+      endif
+      if (Chưa thông báo hoặc đã hết cooldown?) then (Có)
+        :Đánh dấu có thay đổi cần thông báo;
+        :Cập nhật lastNotifiedAt;
+      else (Chưa)
+        :Không tạo thông báo lặp;
+      endif
+    else (Không)
+      if (Có active episode?) then (Có)
+        :Đóng episode; status=resolved;
+        :Lưu resolvedAt và thông báo kết thúc;
+      else (Không)
+        :Không phát sinh episode;
+      endif
+    endif
+  else (Không)
+    :Giữ trạng thái trước đó;
+    :Đánh dấu dữ liệu cũ; không kết luận đã an toàn;
+  endif
+else (Không)
+  :Chỉ lưu lịch sử;
+  :Không thay đổi current/alert progression;
+endif
+:Commit observation và alert thay đổi;
+if (Commit thành công?) then (Có)
+  :Phát weather.update sau commit;
+else (Không)
+  :Rollback; không phát live event;
+endif
+stop
+@enduml

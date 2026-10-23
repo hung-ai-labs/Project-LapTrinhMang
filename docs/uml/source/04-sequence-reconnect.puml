@@ -1,0 +1,56 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title UC06 — Reconnect, tải bù và đổi địa điểm (thiết kế đích)
+actor "Người xem" as U
+participant "React Client" as C
+participant "WebSocket Hub" as H
+participant "REST API" as API
+database "PostgreSQL / Neon" as DB
+U -> C: Chọn địa điểm + nguồn
+C -> C: Hủy request/subscription cũ; tăng generation token
+C -> H: Mở WS theo địa điểm + nguồn
+H --> C: Kết nối được chấp nhận
+C -> C: Buffer live events trong lúc resync
+C -> API: GET current + history(afterCursor)
+API -> DB: Snapshot + history phân trang
+DB --> API: Dữ liệu + nextCursor + server watermark
+API --> C: Snapshot, history, cursor
+C -> C: Merge DB + buffer theo eventId\nCurrent theo observedAt; giữ source đúng
+C --> U: Trực tuyến + freshness
+H ->> C: weather.update / heartbeat
+C -> C: Ghi last cursor và thời điểm heartbeat
+alt WS đóng hoặc heartbeat quá hạn
+  C --> U: Mất kết nối, giữ dữ liệu cuối + freshness
+  loop Đến khi nối được hoặc người dùng đổi địa điểm
+    C -> C: Backoff 1, 2, 4... tối đa 15 giây
+    C -> H: Kết nối lại subscription
+  end
+  C -> API: Tải bù từ lastCursor, phân trang tới watermark
+  API --> C: Dữ liệu thiếu hoặc cursor_expired
+  alt Cursor còn hiệu lực
+    C -> C: Merge, loại trùng và xả buffer live
+  else Cursor hết hiệu lực / queue có gap
+    C -> API: Full resync theo cửa sổ đang xem
+    API --> C: Snapshot + history
+    C --> U: Thông báo khoảng dữ liệu không thể khôi phục nếu có
+  end
+else Người dùng đổi địa điểm trong lúc đồng bộ
+  C -> C: Hủy tác vụ cũ; bỏ response generation cũ
+end
+note over C,DB
+Cần cursor theo thứ tự ingestion (received_at + ID hoặc sequence),
+không dùng observed_at đơn lẻ vì có dữ liệu tới muộn.
+Base mới tải 60 bản tin, chưa có giao thức cursor/gap này.
+end note
+@enduml

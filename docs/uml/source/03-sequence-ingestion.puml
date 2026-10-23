@@ -1,0 +1,63 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title UC03 — Nhận dữ liệu TCP, retry và broadcast (thiết kế đích)
+actor "TCP Producer" as P
+participant "TCP Listener" as TCP
+participant "Ingestion Service" as S
+database "PostgreSQL / Neon" as DB
+participant "Alert Service" as A
+participant "WebSocket Hub" as H
+participant "React Client(s)" as C
+P -> TCP: Gửi byte stream NDJSON
+TCP -> TCP: Buffer đến newline\nKiểm tra 8 KiB / timeout
+alt Frame hoặc schema không hợp lệ
+  TCP --> P: error: invalid_observation / frame_limit
+else Frame hợp lệ
+  TCP -> S: ingest(eventId, payload)
+  S -> S: Validate đơn vị, timezone, nguồn, clock skew
+  S -> DB: Kiểm tra eventId / khóa tự nhiên
+  alt Trùng eventId, cùng payload
+    DB --> S: Bản ghi đã tồn tại
+    S --> TCP: duplicate
+    TCP --> P: ACK duplicate
+  else Trùng eventId, payload khác
+    S --> TCP: conflict
+    TCP --> P: error: event_id_conflict
+  else Quan sát mới
+    S -> DB: BEGIN; insert observation
+    S -> A: evaluate nếu mới hơn watermark và fresh
+    A -> DB: Mở / cập nhật / đóng alert episode\n(trong cùng transaction đề xuất)
+    alt Lỗi lưu trữ
+      S -> DB: ROLLBACK
+      S --> TCP: storage_unavailable
+      TCP --> P: error có thể retry
+    else Commit thành công
+      S -> DB: COMMIT
+      S -> H: publish(city, source, eventId, observation, alerts)
+      H ->> C: weather.update (best-effort)
+      S --> TCP: accepted
+      TCP --> P: ACK accepted + eventId
+    end
+  end
+end
+opt Mất ACK hoặc lỗi kết nối
+  P -> P: Backoff; giữ nguyên eventId và payload
+  P -> TCP: Kết nối lại, gửi lại frame
+end
+note over S,C
+Nếu process chết sau commit nhưng trước broadcast: dữ liệu còn trong DB.
+Client tải bù qua REST; không đảm bảo exactly-once live delivery.
+Base hiện tại chưa có transaction lưu alert episode hoặc payload conflict.
+end note
+@enduml

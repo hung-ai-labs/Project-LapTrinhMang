@@ -1,0 +1,66 @@
+@startuml
+!pragma layout smetana
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #40566F
+skinparam classBackgroundColor #F0F6FC
+skinparam componentBackgroundColor #F0F6FC
+skinparam usecaseBackgroundColor #EDF6FF
+skinparam actorBorderColor #29445F
+skinparam sequenceMessageAlign center
+title Weather Stream — Component Diagram đề xuất
+top to bottom direction
+actor "Người xem" as Viewer
+actor "Người vận hành" as Operator
+cloud "Weather Provider" as Provider
+package "Giải pháp Weather Stream" {
+  component "React Dashboard" as UI
+  component "Nginx / Vite Proxy" as Proxy
+  component "Collector / Simulator\nprocess độc lập" as Collector
+  package "FastAPI process — 1 worker" {
+    component "REST API" as API
+    component "TCP Listener" as TCP
+    component "Ingestion Service" as Ingest
+    component "Alert Service" as Alert
+    component "Forecast Service" as Forecast
+    interface "Predictor" as Predictor
+    component "Persistence Predictor" as Baseline
+    component "Trained Model Predictor" as Trained
+    component "WebSocket Hub" as Hub
+    component "Repository / SQLAlchemy" as Repo
+  }
+  component "Offline Train / Evaluate CLI" as Training
+  artifact "Versioned Model Artifact" as Model
+}
+database "PostgreSQL / Neon" as DB
+Viewer --> UI
+UI --> Proxy : HTTP / WS
+Proxy --> API : REST
+Proxy --> Hub : WebSocket
+Collector --> Provider : HTTPS polling + retry
+Collector --> TCP : TCP NDJSON + ACK
+TCP --> Ingest
+Ingest --> Alert
+Ingest --> Repo
+Alert --> Repo
+Ingest --> Hub : Chỉ sau commit
+API --> Repo : Snapshot / history / alerts
+API --> Forecast
+Forecast --> Repo
+Forecast --> Predictor
+Predictor <|.. Baseline
+Predictor <|.. Trained
+Trained --> Model : Load version active
+Operator --> Collector : Cấu hình / chạy
+Operator --> Training : Train / evaluate / activate
+Training --> Repo : Đọc dataset thật
+Training --> Model : Xuất artifact + metrics
+Repo --> DB : PostgreSQL protocol + TLS khi dùng Neon
+note bottom of Hub
+Hub trong RAM, queue có giới hạn.
+Đa worker cần thiết kế pub/sub riêng sau MVP.
+end note
+@enduml
