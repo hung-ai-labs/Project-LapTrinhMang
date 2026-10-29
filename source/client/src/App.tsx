@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import AuthPage from "./components/AuthPage";
 import { useDayPeriod } from "./hooks/useDayPeriod";
 import { useWeather } from "./hooks/useWeather";
 import type { City } from "./lib/api";
@@ -124,6 +125,23 @@ function CityPicker({ value, options, onChange }: CityPickerProps) {
 }
 
 export default function App() {
+  const [path, setPath] = useState(window.location.pathname);
+  useEffect(() => {
+    const sync = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const navigate = (next: string) => {
+    window.history.pushState({}, "", next);
+    setPath(next);
+  };
+  if (path === "/login" || path === "/register") {
+    return <AuthPage onGuest={() => navigate("/")} />;
+  }
+  return <Dashboard onNavigate={navigate} />;
+}
+
+function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [city, setCity] = useState<City>("hanoi");
   const { event, history, forecast, status, error } = useWeather(city);
   const period = useDayPeriod();
@@ -147,7 +165,11 @@ export default function App() {
             <span aria-hidden="true">☁</span>
             <span>Weather Stream<small>TRẠM THỜI TIẾT TRỰC TUYẾN</small></span>
           </a>
-          <span className={`connection ${status === "Đang trực tuyến" ? "online" : ""}`}>● {status}</span>
+          <div className="account-actions">
+            <a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Đăng nhập</a>
+            <a href="/register" onClick={(event) => { event.preventDefault(); onNavigate("/register"); }}>Đăng ký</a>
+            <span className={`connection ${status === "Đang trực tuyến" ? "online" : ""}`}>● {status}</span>
+          </div>
         </header>
         <section className="heading">
           <div>
