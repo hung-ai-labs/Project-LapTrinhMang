@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import AuthPage from "./components/AuthPage";
 import { useWeather } from "./hooks/useWeather";
 import type { City } from "./lib/api";
 
@@ -16,6 +17,18 @@ const time = (value: string) =>
   });
 
 export default function App() {
+  const [path, setPath] = useState(window.location.pathname);
+  useEffect(() => {
+    const sync = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const navigate = (next: string) => { window.history.pushState({}, "", next); setPath(next); };
+  if (path === "/login" || path === "/register") return <AuthPage onGuest={() => navigate("/")} />;
+  return <Dashboard onNavigate={navigate} />;
+}
+
+function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [city, setCity] = useState<City>("hanoi");
   const { event, history, forecast, status, error } = useWeather(city);
   const current = event?.observation;
@@ -29,11 +42,15 @@ export default function App() {
             Weather Stream<small>TRẠM THỜI TIẾT TRỰC TUYẾN</small>
           </span>
         </a>
+        <div className="account-actions">
+            <a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Đăng nhập</a>
+            <a href="/register" onClick={(event) => { event.preventDefault(); onNavigate("/register"); }}>Đăng ký</a>
         <span
           className={`connection ${status === "Đang trực tuyến" ? "online" : ""}`}
         >
           ● {status}
         </span>
+        </div>
       </header>
       <section className="heading">
         <div>
