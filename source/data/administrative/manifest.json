@@ -1,0 +1,26 @@
+{
+  "dataset_version": "open-admin-data@54cdb052284b02e75dfaa44089ca383aa12c57db",
+  "source_repository": "https://github.com/open-admin-data/vietnam-administrative-divisions",
+  "source_commit": "54cdb052284b02e75dfaa44089ca383aa12c57db",
+  "retrieved_at": "2026-11-03T14:00:49.278744+00:00",
+  "license": "CC-BY-4.0",
+  "counts": {
+    "provinces": 34,
+    "wards": 3321
+  },
+  "source_files": {
+    "data/all-province.json": {
+      "url": "https://raw.githubusercontent.com/open-admin-data/vietnam-administrative-divisions/54cdb052284b02e75dfaa44089ca383aa12c57db/data/all-province.json",
+      "sha256": "c41793e6acc321d7253e004fc87659c57a70df3893f957df4821dc02092f12e9"
+    },
+    "data/all-ward.json": {
+      "url": "https://raw.githubusercontent.com/open-admin-data/vietnam-administrative-divisions/54cdb052284b02e75dfaa44089ca383aa12c57db/data/all-ward.json",
+      "sha256": "66ceabf7d42a656c375e37b16f309ce83376fbc3d35f01309811373b916e2771"
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/open-admin-data/vietnam-administrative-divisions/54cdb052284b02e75dfaa44089ca383aa12c57db/LICENSE",
+      "sha256": "c3479e413d67b5e12c11d3917349e3f1cb418e167302b907722f189881cbc306"
+    }
+  },
+  "snapshot_sha256": "00dacbe956e64b4a4f14eb6ebd9d5a1533f5ec5980b93251cba8328726c309ce"
+}

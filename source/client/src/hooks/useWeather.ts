@@ -4,6 +4,7 @@ import {
   type City,
   type Forecast,
   type Observation,
+  type PaginatedResponse,
   type WeatherEvent,
 } from "../lib/api";
 
@@ -48,12 +49,12 @@ export function useWeather(city: City) {
       try {
         const [snapshot, records, prediction] = await Promise.all([
           api<WeatherEvent>(`/weather/${city}/current`, abort.signal),
-          api<Observation[]>(`/weather/${city}/history`, abort.signal),
+          api<PaginatedResponse<Observation>>(`/weather/${city}/history`, abort.signal),
           api<Forecast>(`/weather/${city}/forecast`, abort.signal),
         ]);
         if (!disposed) {
           applyEvent(snapshot);
-          setHistory((previous) => mergeHistory(previous, records));
+          setHistory((previous) => mergeHistory(previous, records.results));
           setForecast(prediction);
           setError("");
         }

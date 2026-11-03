@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 from app.core.config import get_settings
-from app.db.models import Base
+from app.db import Base
 
 
 def run(connection):

@@ -43,7 +43,7 @@ jobs:
           import json, time, urllib.request
           for attempt in range(30):
               with urllib.request.urlopen('http://localhost:8000/api/v1/weather/hanoi/history') as response:
-                  if json.load(response):
+                  if json.load(response)['results']:
                       break
               time.sleep(1)
           else:

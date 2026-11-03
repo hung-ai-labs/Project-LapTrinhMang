@@ -1,14 +1,24 @@
 import asyncio
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.pagination import page_response, paginate_query
 from app.core.config import get_settings
-from app.db.models import Observation
+from app.db import WeatherObservation
 from app.db.session import get_session
 from app.network.hub import hub
+from app.schemas.pagination import PaginatedResponse
 from app.schemas.weather import (
     CitiesOut,
     City,
@@ -23,7 +33,7 @@ from app.services.forecast import forecaster
 router = APIRouter()
 
 
-@router.get("/health", response_model=HealthOut)
+@router.get("/health", response_model=HealthOut, tags=["Health"])
 async def health(session: AsyncSession = Depends(get_session)):
     try:
         await session.execute(text("SELECT 1"))
@@ -32,40 +42,57 @@ async def health(session: AsyncSession = Depends(get_session)):
     return {"status": "ok", "database": "ok"}
 
 
-@router.get("/cities", response_model=list[CitiesOut])
-async def cities():
-    return [
+@router.get("/cities", response_model=PaginatedResponse[CitiesOut], tags=["City"])
+async def cities(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    records = [
         {"id": "hanoi", "name": "Hà Nội"},
         {"id": "danang", "name": "Đà Nẵng"},
         {"id": "hcm", "name": "TP. Hồ Chí Minh"},
     ]
+    return page_response(
+        request, records[offset:offset + limit], count=len(records), limit=limit, offset=offset
+    )
 
 
-@router.get("/weather/{city}/history", response_model=list[ObservationOut])
+@router.get(
+    "/weather/{city}/history",
+    response_model=PaginatedResponse[ObservationOut],
+    tags=["WeatherObservation"],
+)
 async def history(
+    request: Request,
     city: City,
     limit: int = Query(default=60, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.scalars(
-        select(Observation)
-        .where(Observation.city == city)
-        .order_by(Observation.observed_at.desc(), Observation.id.desc())
-        .limit(limit)
+    statement = (
+        select(WeatherObservation)
+        .where(WeatherObservation.legacy_city == city)
+        .order_by(WeatherObservation.observed_at.desc(), WeatherObservation.id.desc())
     )
-    return list(result.all())
+    return await paginate_query(session, statement, request, limit=limit, offset=offset)
 
 
-@router.get("/weather/{city}/current", response_model=WeatherEvent)
+@router.get("/weather/{city}/current", response_model=WeatherEvent, tags=["WeatherObservation"])
 async def current(city: City, session: AsyncSession = Depends(get_session)):
-    records = await history(city, 1, session)
-    if not records:
+    record = await session.scalar(
+        select(WeatherObservation)
+        .where(WeatherObservation.legacy_city == city)
+        .order_by(WeatherObservation.observed_at.desc(), WeatherObservation.id.desc())
+        .limit(1)
+    )
+    if record is None:
         raise HTTPException(404, "Chưa có dữ liệu. Hãy chạy publisher mô phỏng.")
-    observation = ObservationOut.model_validate(records[0])
+    observation = ObservationOut.model_validate(record)
     return WeatherEvent(observation=observation, alerts=evaluate_alerts(observation))
 
 
-@router.get("/weather/{city}/forecast", response_model=ForecastOut)
+@router.get("/weather/{city}/forecast", response_model=ForecastOut, tags=["Forecast"])
 async def forecast(city: City, session: AsyncSession = Depends(get_session)):
     event = await current(city, session)
     return forecaster.predict(event.observation)

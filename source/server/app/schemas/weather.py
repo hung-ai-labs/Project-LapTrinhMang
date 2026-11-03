@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, AwareDatetime, BaseModel, ConfigDict, Field
 
 City = Literal["hanoi", "danang", "hcm"]
 
@@ -22,7 +22,7 @@ class ObservationInput(BaseModel):
 class ObservationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
-    city: str
+    city: str = Field(validation_alias=AliasChoices("legacy_city", "city"))
     temperature: float
     humidity: float
     wind_speed: float

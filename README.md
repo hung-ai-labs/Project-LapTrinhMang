@@ -152,14 +152,78 @@ cùng database để chạy `alembic upgrade head`. Không commit `.env` và kh�
 
 ## Giao tiếp và hợp đồng dữ liệu
 
+### Model và danh mục tỉnh/phường xã
+
+Backend đã tách model thành từng file trong `source/server/app/db/`, export qua `app.db`:
+`Province`, `Ward`, `User`, `UserSession`, `WeatherObservation`, `AlertRule`, `WeatherAlert`,
+`Forecast`. Tất cả model kế thừa `created_at` và `updated_at` từ `Base`.
+Ward lưu tọa độ đại diện; `User.default_ward_id` là khu vực mặc định.
+Migration `0002` nâng trực tiếp từ `0001` lên schema hiện tại, có timestamp chung và
+giữ observations cấp thành phố cũ, không tự gán chúng vào một phường/xã.
+Forecast hiện chỉ hỗ trợ baseline. Giải thích Session và quy tắc/các đợt cảnh báo nằm trong
+[model và luồng dữ liệu](docs/MODEL_VA_LUONG_DU_LIEU.md).
+
+Snapshot danh mục có 34 tỉnh/thành và 3.321 đơn vị cấp xã, cố định commit nguồn và SHA-256.
+Chi tiết nguồn, giấy phép và cách cập nhật ở [danh mục hành chính](source/data/administrative/README.md).
+Từ `source/server`, sau khi kích hoạt môi trường Python và cấu hình `DATABASE_URL`:
+
+```bash
+alembic upgrade head
+python ../scripts/import_administrative_units.py          # Chỉ kiểm tra snapshot
+python ../scripts/import_administrative_units.py --apply  # Nhập vào database đã cấu hình
+```
+
+API danh mục sau khi import:
+
+| Endpoint `/api/v1` | Kết quả |
+|---|---|
+| `GET /provinces?q=...&limit=100&offset=0` | Danh sách tỉnh/thành đang hoạt động |
+| `GET /provinces/{province_id}/wards?q=...&limit=100&offset=0` | Phường/xã trong tỉnh |
+| `POST /geography/nearest-ward` | Nhận `{latitude, longitude}`, trả ward gần nhất, tỉnh cha và `distance_km` |
+
+Phép chọn gần nhất dùng Haversine trên tọa độ đại diện của ward đang hoạt động;
+kết quả là khu vực gần đúng, không xác định ranh giới hành chính. API không ghi tọa độ người dùng
+hoặc tự tạo tài khoản. Model/schema đã sẵn sàng cho lưu ward mặc định; đăng nhập, API `/me`,
+giao diện chọn ward/định vị và provider thời tiết theo ward là các bước tích hợp tiếp theo.
+Dashboard và publisher hiện tại vẫn dùng luồng ba thành phố mô phỏng bên dưới.
+
+### API docs và pagination
+
+Swagger `/docs` và ReDoc `/redoc` nhóm các HTTP API theo `Province`, `Ward`,
+`WeatherObservation`, `Forecast`, cùng nhóm `City` cho thành phố demo và `Health`.
+Schema OpenAPI nằm tại `/openapi.json`.
+
+Tất cả API trả danh sách (`/cities`, `/provinces`, `/provinces/{id}/wards`,
+`/weather/{city}/history`) dùng response chung:
+
+```json
+{
+  "count": 3,
+  "next": "/api/v1/cities?limit=1&offset=1",
+  "previous": null,
+  "results": [
+    {"id": "hanoi", "name": "Hà Nội"}
+  ]
+}
+```
+
+Ví dụ trên là `GET /api/v1/cities?limit=1`. `count` là tổng số bản ghi sau khi lọc,
+`results` chứa dữ liệu của trang đang lấy. `next`/`previous` là đường dẫn cùng origin,
+giữ nguyên bộ lọc; không có trang tiếp theo thì `next=null`, ở offset 0 thì `previous=null`.
+Kết quả không có bản ghi trả `count=0` và `results=[]`.
+
+`limit` trong khoảng 1–500, `offset` không âm. Mặc định limit là 100 cho danh mục và 60
+cho history. API trả một đối tượng như current, forecast, nearest-ward và các event
+WebSocket vẫn dùng schema đối tượng tương ứng. Frontend đọc lịch sử từ `response.results`.
+
 ### REST / WebSocket
 
 | Endpoint | Giao thức | Kết quả |
 |---|---|---|
 | `/api/v1/health` | HTTP GET | Kiểm tra DB, trả 503 khi không kết nối được |
-| `/api/v1/cities` | HTTP GET | `hanoi`, `danang`, `hcm` |
+| `/api/v1/cities?limit=100&offset=0` | HTTP GET | Các thành phố demo trong `results` và metadata pagination |
 | `/api/v1/weather/{city}/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
-| `/api/v1/weather/{city}/history?limit=60` | HTTP GET | Mới nhất trước, giới hạn 1–500 bản tin |
+| `/api/v1/weather/{city}/history?limit=60&offset=0` | HTTP GET | History phân trang, mới nhất trước; count/next/previous/results |
 | `/api/v1/weather/{city}/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
 | `/api/v1/ws/weather/{city}` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
 

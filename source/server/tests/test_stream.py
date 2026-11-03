@@ -49,7 +49,7 @@ def test_retry_is_idempotent(client):
     value = observation()
     assert send(value)["status"] == "accepted"
     assert send(value)["status"] == "duplicate"
-    assert len(client.get("/api/v1/weather/hanoi/history").json()) == 1
+    assert client.get("/api/v1/weather/hanoi/history").json()["count"] == 1
 
 
 def test_tcp_split_and_coalesced_frames(client):
@@ -61,7 +61,7 @@ def test_tcp_split_and_coalesced_frames(client):
         stream = connection.makefile("rb")
         assert json.loads(stream.readline())["status"] == "accepted"
         assert json.loads(stream.readline())["status"] == "accepted"
-    assert len(client.get("/api/v1/weather/hanoi/history").json()) == 2
+    assert client.get("/api/v1/weather/hanoi/history").json()["count"] == 2
 
 
 def test_invalid_frame_does_not_kill_connection(client):
@@ -85,7 +85,7 @@ def test_city_isolation_and_empty_state(client):
         value = observation()
         send(value)
         assert ws.receive_json()["observation"]["id"] == value["event_id"]
-    assert len(client.get("/api/v1/weather/danang/history").json()) == 1
+    assert client.get("/api/v1/weather/danang/history").json()["count"] == 1
 
 
 def test_oversized_tcp_frame_is_rejected(client):

@@ -1,4 +1,10 @@
 export type City = "hanoi" | "danang" | "hcm";
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
 export interface Observation {
   id: string;
   city: City;

@@ -13,7 +13,7 @@ os.environ["TCP_PORT"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.db.models import Base  # noqa: E402
+from app.db import Base  # noqa: E402
 from app.db.session import engine  # noqa: E402
 from app.main import app  # noqa: E402
 
