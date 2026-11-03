@@ -56,8 +56,3 @@ class ForecastOut(BaseModel):
 class HealthOut(BaseModel):
     status: str
     database: str
-
-
-class CitiesOut(BaseModel):
-    id: str
-    name: str

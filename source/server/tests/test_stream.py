@@ -37,10 +37,10 @@ def test_tcp_to_database_and_websocket(client):
         event = ws.receive_json()
         assert event["observation"]["id"] == value["event_id"]
         assert {a["code"] for a in event["alerts"]} == {"heat", "rain", "wind"}
-    current = client.get("/api/v1/weather/hanoi/current").json()
+    current = client.get("/api/v1/weather/hanoi/current").json()["data"]
     assert current["observation"]["temperature"] == 36
     assert client.get("/api/v1/health").status_code == 200
-    forecast = client.get("/api/v1/weather/hanoi/forecast").json()
+    forecast = client.get("/api/v1/weather/hanoi/forecast").json()["data"]
     assert forecast["is_ai"] is False
     assert forecast["method"] == "persistence_baseline"
 
@@ -49,7 +49,7 @@ def test_retry_is_idempotent(client):
     value = observation()
     assert send(value)["status"] == "accepted"
     assert send(value)["status"] == "duplicate"
-    assert len(client.get("/api/v1/weather/hanoi/history").json()) == 1
+    assert client.get("/api/v1/weather/hanoi/history").json()["data"]["count"] == 1
 
 
 def test_tcp_split_and_coalesced_frames(client):
@@ -61,7 +61,7 @@ def test_tcp_split_and_coalesced_frames(client):
         stream = connection.makefile("rb")
         assert json.loads(stream.readline())["status"] == "accepted"
         assert json.loads(stream.readline())["status"] == "accepted"
-    assert len(client.get("/api/v1/weather/hanoi/history").json()) == 2
+    assert client.get("/api/v1/weather/hanoi/history").json()["data"]["count"] == 2
 
 
 def test_invalid_frame_does_not_kill_connection(client):
@@ -79,13 +79,13 @@ def test_invalid_frame_does_not_kill_connection(client):
 def test_city_isolation_and_empty_state(client):
     assert client.get("/api/v1/weather/hanoi/current").status_code == 404
     assert client.get("/api/v1/weather/unknown/history").status_code == 422
-    assert client.get("/api/v1/weather/hanoi/history?limit=999").status_code == 422
+    assert client.get("/api/v1/weather/hanoi/history?page_size=101").status_code == 422
     with client.websocket_connect("/api/v1/ws/weather/hanoi") as ws:
         send(observation(city="danang"))
         value = observation()
         send(value)
         assert ws.receive_json()["observation"]["id"] == value["event_id"]
-    assert len(client.get("/api/v1/weather/danang/history").json()) == 1
+    assert client.get("/api/v1/weather/danang/history").json()["data"]["count"] == 1
 
 
 def test_oversized_tcp_frame_is_rejected(client):
@@ -97,5 +97,5 @@ def test_oversized_tcp_frame_is_rejected(client):
 
 def test_provider_does_not_mix_into_simulator_history(client):
     send(observation(source="provider"))
-    assert client.get("/api/v1/weather/hanoi/history").json() == []
+    assert client.get("/api/v1/weather/hanoi/history").json()["data"]["results"] == []
     assert client.get("/api/v1/weather/hanoi/current").status_code == 404

@@ -1,4 +1,10 @@
 export type City = "hanoi" | "danang" | "hcm";
+export interface PaginatedData<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
 export interface Observation {
   id: string;
   city: City;
@@ -25,11 +31,11 @@ export interface Forecast {
 }
 export async function api<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/v1${path}`, { signal });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+  const body = await response.json().catch(() => null);
+  if (!response.ok || body?.success !== true) {
     throw new Error(
-      body.detail || `Không tải được dữ liệu (${response.status}).`,
+      body?.error?.message || `Không tải được dữ liệu (${response.status}).`,
     );
   }
-  return response.json();
+  return body.data as T;
 }

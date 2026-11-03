@@ -29,8 +29,11 @@ async function requestAuth(path: string, body?: unknown): Promise<JwtAuthResult>
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Vui lòng kiểm tra thông tin đã nhập.");
+  const payload = await response.json();
+  if (!response.ok || payload.success !== true) {
+    throw new Error(payload.error?.message || "Vui lòng kiểm tra thông tin đã nhập.");
+  }
+  const data: JwtAuthResult = payload.data;
   session = data;
   clearTimeout(expiryTimer);
   expiryTimer = setTimeout(() => {

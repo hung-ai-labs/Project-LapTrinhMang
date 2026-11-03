@@ -2,7 +2,7 @@ from datetime import UTC
 
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Observation
+from app.db import Observation
 from app.db.session import Session
 from app.network.hub import hub
 from app.schemas.weather import ObservationInput, ObservationOut, WeatherEvent

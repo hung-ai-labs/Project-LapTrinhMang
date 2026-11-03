@@ -1,16 +1,25 @@
 import asyncio
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.pagination import paginate_query
 from app.core.config import get_settings
-from app.db.models import Observation
+from app.db import Observation
 from app.db.session import get_session
 from app.network.hub import hub
+from app.schemas.responses import ApiResponse, ErrorResponse, PaginatedData, success
 from app.schemas.weather import (
-    CitiesOut,
     City,
     ForecastOut,
     HealthOut,
@@ -20,57 +29,65 @@ from app.schemas.weather import (
 from app.services.alerts import evaluate_alerts
 from app.services.forecast import forecaster
 
-router = APIRouter()
+router = APIRouter(responses={404: {"model": ErrorResponse}})
 
 
-@router.get("/health", response_model=HealthOut)
+@router.get("/health", response_model=ApiResponse[HealthOut], tags=["Health"])
 async def health(session: AsyncSession = Depends(get_session)):
     try:
         await session.execute(text("SELECT 1"))
     except Exception as exc:
         raise HTTPException(503, "Không kết nối được cơ sở dữ liệu.") from exc
-    return {"status": "ok", "database": "ok"}
+    return success({"status": "ok", "database": "ok"})
 
 
-@router.get("/cities", response_model=list[CitiesOut])
-async def cities():
-    return [
-        {"id": "hanoi", "name": "Hà Nội"},
-        {"id": "danang", "name": "Đà Nẵng"},
-        {"id": "hcm", "name": "TP. Hồ Chí Minh"},
-    ]
-
-
-@router.get("/weather/{city}/history", response_model=list[ObservationOut])
+@router.get(
+    "/weather/{city}/history", response_model=ApiResponse[PaginatedData[ObservationOut]],
+    tags=["Observation"],
+)
 async def history(
+    request: Request,
     city: City,
-    limit: int = Query(default=60, ge=1, le=500),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.scalars(
+    statement = (
         select(Observation)
         .where(Observation.city == city, Observation.source == get_settings().weather_source)
         .order_by(Observation.observed_at.desc(), Observation.id.desc())
-        .limit(limit)
     )
-    return list(result.all())
+    return success(await paginate_query(
+        session, statement, request, page=page, page_size=page_size
+    ))
 
 
-@router.get("/weather/{city}/current", response_model=WeatherEvent)
-async def current(city: City, session: AsyncSession = Depends(get_session)):
-    records = await history(city, 1, session)
-    if not records:
+async def current_weather(city: City, session: AsyncSession) -> WeatherEvent:
+    record = await session.scalar(
+        select(Observation)
+        .where(Observation.city == city, Observation.source == get_settings().weather_source)
+        .order_by(Observation.observed_at.desc(), Observation.id.desc())
+        .limit(1)
+    )
+    if record is None:
         raise HTTPException(
             404, "Chưa có dữ liệu cho nguồn đã chọn. Hãy chạy collector hoặc publisher tương ứng."
         )
-    observation = ObservationOut.model_validate(records[0])
+    observation = ObservationOut.model_validate(record)
     return WeatherEvent(observation=observation, alerts=evaluate_alerts(observation))
 
 
-@router.get("/weather/{city}/forecast", response_model=ForecastOut)
+@router.get(
+    "/weather/{city}/current", response_model=ApiResponse[WeatherEvent], tags=["Observation"]
+)
+async def current(city: City, session: AsyncSession = Depends(get_session)):
+    return success(await current_weather(city, session))
+
+
+@router.get("/weather/{city}/forecast", response_model=ApiResponse[ForecastOut], tags=["Forecast"])
 async def forecast(city: City, session: AsyncSession = Depends(get_session)):
-    event = await current(city, session)
-    return forecaster.predict(event.observation)
+    event = await current_weather(city, session)
+    return success(forecaster.predict(event.observation))
 
 
 @router.websocket("/ws/weather/{city}")
