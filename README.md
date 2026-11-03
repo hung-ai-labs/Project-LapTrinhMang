@@ -18,6 +18,8 @@ Chi tiết chức năng cần làm trước và tiêu chí hoàn thành: [Kế h
 
 - [Phân tích nghiệp vụ BA: phạm vi, yêu cầu, use case, quy tắc và nghiệm thu](docs/01_PHAN_TICH_NGHIEP_VU.md).
 - [Bộ UML: 9 sơ đồ, nguồn PlantUML và ảnh PNG/SVG](docs/02_THIET_KE_UML.md).
+- [Ý tưởng tính năng và bản đồ màn hình](docs/03_Y_TUONG_TINH_NANG_VA_MAN_HINH.md).
+- [Prompt Figma cho giao diện desktop/mobile](docs/04_PROMPT_FIGMA.md).
 
 Đây là thiết kế MVP đề xuất để review trước khi phát triển tiếp; các chức năng/bảng mới trong thiết kế chưa được triển khai.
 
