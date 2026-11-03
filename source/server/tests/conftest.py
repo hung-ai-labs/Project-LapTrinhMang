@@ -4,6 +4,9 @@ import tempfile
 
 import pytest
 
+os.environ["JWT_SECRET"] = "test-only-secret-key-of-at-least-32-characters"
+os.environ["WEATHER_SOURCE"] = "simulator"
+
 # Isolate from .env/Neon. Never use an application database in unit tests.
 _test_dir = tempfile.TemporaryDirectory(prefix="weather-tests-")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_test_dir.name}/test.db"

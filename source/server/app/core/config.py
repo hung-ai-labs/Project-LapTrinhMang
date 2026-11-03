@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     tcp_host: str = "127.0.0.1"
     tcp_port: int = Field(default=9000, ge=0, le=65535)
     enable_tcp: bool = True
+    jwt_secret: SecretStr = SecretStr("")
+    jwt_expire_minutes: int = Field(default=30, ge=1, le=1440)
+    weather_source: str = "provider"
 
 
 @lru_cache

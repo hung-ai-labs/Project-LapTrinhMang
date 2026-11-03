@@ -1,6 +1,8 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+from app.core.config import get_settings
+
 
 class WeatherHub:
     """One bounded queue per subscriber; slow consumers keep the newest events."""
@@ -19,7 +21,7 @@ class WeatherHub:
 
     def publish(self, city: str, event: dict):
         for queue, selected in tuple(self.subscribers.items()):
-            if selected != city:
+            if selected != city or event["observation"]["source"] != get_settings().weather_source:
                 continue
             if queue.full():
                 queue.get_nowait()

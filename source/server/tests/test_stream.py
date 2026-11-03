@@ -93,3 +93,9 @@ def test_oversized_tcp_frame_is_rejected(client):
         connection.sendall(b"x" * 9000 + b"\n")
         reply = json.loads(connection.makefile("rb").readline())
         assert reply["code"] == "frame_limit_or_timeout"
+
+
+def test_provider_does_not_mix_into_simulator_history(client):
+    send(observation(source="provider"))
+    assert client.get("/api/v1/weather/hanoi/history").json() == []
+    assert client.get("/api/v1/weather/hanoi/current").status_code == 404

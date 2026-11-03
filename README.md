@@ -291,3 +291,50 @@ khi reconnect ở UI hiện tại. Xem thứ tự triển khai và phân công t
 - [SQLAlchemy PostgreSQL / Psycopg](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#module-sqlalchemy.dialects.postgresql.psycopg)
 - [Neon: kết nối ứng dụng](https://neon.com/docs/connect/connect-from-any-app)
 - [Vite: Getting Started](https://vite.dev/guide/)
+
+## Cập nhật: JWT và Open-Meteo (03/11/2026)
+
+Đã triển khai backend tài khoản và collector provider. Những mô tả “chưa có auth/provider” ở phần base
+và tài liệu BA/UML cũ mô tả thời điểm khởi tạo; không dùng làm trạng thái hiện tại của hai tính năng này.
+
+### JWT
+
+Migration `0002` thêm `users` (email unique, password_hash Argon2, token_version, created_at).
+Cấu hình `JWT_SECRET` ngẫu nhiên tối thiểu 32 ký tự trong cả `.env` root và `source/server/.env`.
+Không đưa secret lên Git. Sinh bằng `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
+JWT HS256 mặc định 30 phút, kiểm tra signature/issuer/audience/expiry và token version tại DB.
+
+| Endpoint | Method | Nội dung |
+|---|---|---|
+| `/api/v1/auth/register` | POST JSON | `{name,email,password}` → token + user, email trùng 409 |
+| `/api/v1/auth/login` | POST JSON | `{email,password}` → token + user, sai thông tin 401 |
+| `/api/v1/auth/me` | GET Bearer JWT | Thông tin tài khoản, không trả password hash |
+| `/api/v1/auth/logout` | POST Bearer JWT | Thu hồi toàn bộ token hiện có của tài khoản, trả 204 |
+
+Frontend đã nối form đăng ký/đăng nhập, hiện tên và đăng xuất. Token giữ trong RAM, không lưu localStorage;
+reload trang cần đăng nhập lại. Chưa có refresh token, Google login, xác minh email, quên mật khẩu hay rate limit.
+Weather API vẫn công khai cho khách. Trước triển khai Internet cần HTTPS và giới hạn đăng nhập tại gateway.
+
+### Open-Meteo
+
+Collector độc lập dùng Python stdlib, poll mặc định 15 phút, timeout/retry, UUID ổn định theo thành phố +
+thời gian nguồn, chờ TCP ACK; không chuyển sang giả lập khi provider lỗi. `current.precipitation` là lượng mm
+trong `current.interval` giây, collector quy đổi thành mm/h; đây là tốc độ trung bình quy đổi, không phải
+số đo trạm hay xác nhận mưa cực đoan. Dữ liệu current do mô hình cung cấp, không phải AI do nhóm train.
+
+```bash
+# Development, sau khi chạy backend:
+python3 source/scripts/collect_open_meteo.py --once
+python3 source/scripts/collect_open_meteo.py
+# Docker, .env cần JWT_SECRET và WEATHER_SOURCE=provider:
+docker compose --profile live up --build -d --wait
+```
+
+Mặc định `WEATHER_SOURCE=provider`: REST và WS chỉ phục vụ provider, không trộn lịch sử simulator.
+Muốn demo simulator, đặt `WEATHER_SOURCE=simulator` rồi bật profile demo, dừng collector nếu không cần.
+Backend local chạy migration: `cd source/server && .venv/bin/alembic upgrade head`.
+Tắt simulator khi demo dữ liệu provider. Collector có thể giữ event chờ ACK trong RAM;
+không có hàng đợi bền vững qua restart. Base chưa xử lý correction cùng timestamp của provider.
+
+Nguồn: [Open-Meteo API](https://open-meteo.com/en/docs), dữ liệu [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Frontend có attribution. Ngưỡng cảnh báo vẫn là demo; AI dự báo vẫn là persistence baseline.

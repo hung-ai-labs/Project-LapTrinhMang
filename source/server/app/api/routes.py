@@ -49,7 +49,7 @@ async def history(
 ):
     result = await session.scalars(
         select(Observation)
-        .where(Observation.city == city)
+        .where(Observation.city == city, Observation.source == get_settings().weather_source)
         .order_by(Observation.observed_at.desc(), Observation.id.desc())
         .limit(limit)
     )
@@ -60,7 +60,9 @@ async def history(
 async def current(city: City, session: AsyncSession = Depends(get_session)):
     records = await history(city, 1, session)
     if not records:
-        raise HTTPException(404, "Chưa có dữ liệu. Hãy chạy publisher mô phỏng.")
+        raise HTTPException(
+            404, "Chưa có dữ liệu cho nguồn đã chọn. Hãy chạy collector hoặc publisher tương ứng."
+        )
     observation = ObservationOut.model_validate(records[0])
     return WeatherEvent(observation=observation, alerts=evaluate_alerts(observation))
 

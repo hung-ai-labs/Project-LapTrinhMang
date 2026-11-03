@@ -33,6 +33,8 @@ jobs:
       - run: npm ci
       - run: npm run build
   compose:
+    env:
+      WEATHER_SOURCE: simulator
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { auth, getAuthSession } from "./lib/auth";
 import AuthPage from "./components/AuthPage";
 import { useDayPeriod } from "./hooks/useDayPeriod";
 import { useWeather } from "./hooks/useWeather";
@@ -142,6 +143,13 @@ export default function App() {
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
+  const [account, setAccount] = useState(getAuthSession);
+  useEffect(() => {
+    const expired = () => { setAccount(null); setLogoutError("Phiên đăng nhập đã hết hạn."); };
+    window.addEventListener("auth-expired", expired);
+    return () => window.removeEventListener("auth-expired", expired);
+  }, []);
+  const [logoutError, setLogoutError] = useState("");
   const [city, setCity] = useState<City>("hanoi");
   const { event, history, forecast, status, error } = useWeather(city);
   const period = useDayPeriod();
@@ -150,7 +158,7 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
   // Scenes illustrate observations because the API does not expose condition codes.
   const scene = !current ? "waiting" : current.rainfall > 0 ? "rain" : current.wind_speed >= 30 ? "wind" : current.humidity >= 80 ? "cloud" : "clear";
   const condition = { waiting: "Đang chờ dữ liệu", rain: "Có mưa", wind: "Gió mạnh", cloud: "Độ ẩm cao", clear: "Không ghi nhận mưa" }[scene];
-  const source = !current ? "Chưa có dữ liệu" : current.source === "simulator" ? "Dữ liệu mô phỏng" : current.source === "provider" ? "Dữ liệu nhà cung cấp" : `Nguồn: ${current.source}`;
+  const source = !current ? "Chưa có dữ liệu" : current.source === "simulator" ? "Dữ liệu mô phỏng" : current.source === "provider" ? "Open-Meteo · dữ liệu mô hình" : `Nguồn: ${current.source}`;
 
   return (
     <div className={`weather-app period-${period} scene-${scene}`}>
@@ -166,8 +174,16 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
             <span>Weather Stream<small>TRẠM THỜI TIẾT TRỰC TUYẾN</small></span>
           </a>
           <div className="account-actions">
-            <a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Đăng nhập</a>
-            <a href="/register" onClick={(event) => { event.preventDefault(); onNavigate("/register"); }}>Đăng ký</a>
+            {account ? <>
+              <span>{account.user.name}</span>
+              <button onClick={async () => {
+                try { await auth.logout(); setAccount(null); setLogoutError(""); }
+                catch { setLogoutError("Không thể đăng xuất. Vui lòng thử lại."); }
+              }}>Đăng xuất</button>
+            </> : <>
+              <a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Đăng nhập</a>
+              <a href="/register" onClick={(event) => { event.preventDefault(); onNavigate("/register"); }}>Đăng ký</a>
+            </>}
             <span className={`connection ${status === "Đang trực tuyến" ? "online" : ""}`}>● {status}</span>
           </div>
         </header>
@@ -179,6 +195,7 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
           </div>
           <CityPicker value={city} options={cities} onChange={setCity} />
         </section>
+        {logoutError && <p role="alert">{logoutError}</p>}
         {error && <p className="notice" role="status">{error}</p>}
         <div className="dashboard">
           <section className="glass current" aria-label="Thời tiết hiện tại">
@@ -219,7 +236,7 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
             </div>
           </section>
         </div>
-        <footer><p>Weather Stream · Giờ Việt Nam (UTC+7)</p><p>Nền minh họa theo thời tiết và giờ Việt Nam · Không phải ảnh trực tiếp</p></footer>
+        <footer><p>Nguồn: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · Mưa quy đổi theo kỳ tích lũy sang mm/h.</p><p>Weather Stream · Giờ Việt Nam (UTC+7)</p><p>Nền minh họa theo thời tiết và giờ Việt Nam · Không phải ảnh trực tiếp</p></footer>
       </main>
     </div>
   );
