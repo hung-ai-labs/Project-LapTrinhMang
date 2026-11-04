@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import Base, Province, User, Ward
+from app.db import Base, Observation, Province, User, Ward
 
 
 @pytest.fixture
@@ -24,6 +24,10 @@ def schema_engine():
 
 def test_models_have_shared_timestamps():
     assert set(Base.metadata.tables) == {"users", "observations", "provinces", "wards"}
+    assert "city" not in Observation.__table__.c
+    assert not Observation.__table__.c.ward_id.nullable
+    targets = {key.target_fullname for key in Observation.__table__.c.ward_id.foreign_keys}
+    assert targets == {"wards.id"}
     for mapper in Base.registry.mappers:
         assert issubclass(mapper.class_, Base)
         assert "created_at" not in mapper.class_.__annotations__

@@ -7,6 +7,7 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
+    Response,
     WebSocket,
     WebSocketDisconnect,
 )
@@ -16,20 +17,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.pagination import paginate_query
 from app.core.config import get_settings
 from app.db import Observation
-from app.db.session import get_session
+from app.db.session import Session, get_session
 from app.network.hub import hub
 from app.schemas.responses import ApiResponse, ErrorResponse, PaginatedData, success
 from app.schemas.weather import (
-    City,
     ForecastOut,
     HealthOut,
     ObservationOut,
     WeatherEvent,
 )
 from app.services.alerts import evaluate_alerts
-from app.services.forecast import forecaster
+from app.services.forecast import ForecastUnavailable
+from app.services.geography import active_ward
 
 router = APIRouter(responses={404: {"model": ErrorResponse}})
+
+
+async def require_ward(session: AsyncSession, ward_id: str):
+    if await active_ward(session, ward_id) is None:
+        raise HTTPException(404, "Không tìm thấy phường/xã đang hoạt động.")
 
 
 @router.get("/health", response_model=ApiResponse[HealthOut], tags=["Health"])
@@ -42,19 +48,20 @@ async def health(session: AsyncSession = Depends(get_session)):
 
 
 @router.get(
-    "/weather/{city}/history", response_model=ApiResponse[PaginatedData[ObservationOut]],
+    "/wards/{ward_id}/weather/history", response_model=ApiResponse[PaginatedData[ObservationOut]],
     tags=["Observation"],
 )
 async def history(
     request: Request,
-    city: City,
+    ward_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
+    await require_ward(session, ward_id)
     statement = (
         select(Observation)
-        .where(Observation.city == city, Observation.source == get_settings().weather_source)
+        .where(Observation.ward_id == ward_id, Observation.source == get_settings().weather_source)
         .order_by(Observation.observed_at.desc(), Observation.id.desc())
     )
     return success(await paginate_query(
@@ -62,10 +69,11 @@ async def history(
     ))
 
 
-async def current_weather(city: City, session: AsyncSession) -> WeatherEvent:
+async def current_weather(ward_id: str, session: AsyncSession) -> WeatherEvent:
+    await require_ward(session, ward_id)
     record = await session.scalar(
         select(Observation)
-        .where(Observation.city == city, Observation.source == get_settings().weather_source)
+        .where(Observation.ward_id == ward_id, Observation.source == get_settings().weather_source)
         .order_by(Observation.observed_at.desc(), Observation.id.desc())
         .limit(1)
     )
@@ -78,26 +86,47 @@ async def current_weather(city: City, session: AsyncSession) -> WeatherEvent:
 
 
 @router.get(
-    "/weather/{city}/current", response_model=ApiResponse[WeatherEvent], tags=["Observation"]
+    "/wards/{ward_id}/weather/current", response_model=ApiResponse[WeatherEvent],
+    tags=["Observation"],
 )
-async def current(city: City, session: AsyncSession = Depends(get_session)):
-    return success(await current_weather(city, session))
+async def current(ward_id: str, session: AsyncSession = Depends(get_session)):
+    return success(await current_weather(ward_id, session))
 
 
-@router.get("/weather/{city}/forecast", response_model=ApiResponse[ForecastOut], tags=["Forecast"])
-async def forecast(city: City, session: AsyncSession = Depends(get_session)):
-    event = await current_weather(city, session)
-    return success(forecaster.predict(event.observation))
+@router.get(
+    "/wards/{ward_id}/weather/forecast", response_model=ApiResponse[ForecastOut], tags=["Forecast"]
+)
+async def forecast(
+    request: Request, response: Response, ward_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    response.headers["Cache-Control"] = "no-store"
+    ward = await active_ward(session, ward_id)
+    if ward is None:
+        raise HTTPException(404, "Không tìm thấy phường/xã đang hoạt động.")
+    if ward.latitude is None or ward.longitude is None:
+        raise HTTPException(422, "Phường/xã chưa có tọa độ để lấy dự báo.")
+    latitude, longitude = float(ward.latitude), float(ward.longitude)
+    await session.rollback()  # Release the read transaction before waiting on the provider.
+    try:
+        value = await request.app.state.forecast_service.get(ward_id, latitude, longitude)
+    except ForecastUnavailable as exc:
+        raise HTTPException(503, "Chưa lấy được dự báo Open-Meteo. Vui lòng thử lại.") from exc
+    return success(value)
 
 
-@router.websocket("/ws/weather/{city}")
-async def weather_socket(websocket: WebSocket, city: City):
+@router.websocket("/ws/wards/{ward_id}/weather")
+async def weather_socket(websocket: WebSocket, ward_id: str):
     origin = websocket.headers.get("origin")
     if origin and origin not in get_settings().cors_origins:
         await websocket.close(code=1008)
         return
+    async with Session() as session:
+        if await active_ward(session, ward_id) is None:
+            await websocket.close(code=1008)
+            return
     await websocket.accept()
-    async with hub.subscribe(city) as queue:
+    async with hub.subscribe(f"ward:{ward_id}") as queue:
         try:
             while True:
                 try:

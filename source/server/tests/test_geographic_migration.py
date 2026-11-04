@@ -44,14 +44,15 @@ def migrate(database, *arguments, check=True):
     return run_command(database, "-m", "alembic", *arguments, check=check)
 
 
-def test_migration_chain_has_one_new_revision():
+def test_migration_chain_preserves_previous_revisions():
     directory = ScriptDirectory.from_config(Config(str(SERVER_DIRECTORY / "alembic.ini")))
-    assert directory.get_heads() == ["0003"]
+    assert directory.get_heads() == ["0004"]
+    assert directory.get_revision("0004").down_revision == "0003"
     assert directory.get_revision("0003").down_revision == "0002"
     assert directory.get_revision("0002").down_revision == "0001"
 
 
-def test_upgrade_preserves_main_data_matches_models_and_keeps_jwt_working(tmp_path, client):
+def test_upgrade_resets_old_observations_matches_models_and_preserves_accounts(tmp_path, client):
     database = tmp_path / "migration.db"
     migrate(database, "upgrade", "0002")
     user_id, event_id = str(uuid4()), str(uuid4())
@@ -87,13 +88,7 @@ def test_upgrade_preserves_main_data_matches_models_and_keeps_jwt_working(tmp_pa
             ).fetchone()
             == user_before
         )
-        assert (
-            connection.execute(
-                "SELECT id, city, temperature, humidity, wind_speed, rainfall, source, observed_at "
-                "FROM observations"
-            ).fetchone()
-            == observation_before
-        )
+        assert connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 0
         assert connection.execute("SELECT updated_at FROM users").fetchone()[0] == user_before[-1]
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     engine = create_engine(f"sqlite:///{database}")
@@ -201,3 +196,56 @@ def test_downgrade_does_not_drop_catalog_or_saved_locations(tmp_path, saved_loca
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT COUNT(*) FROM wards").fetchone()[0] == 1
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0003"
+
+
+def test_reset_only_observations_and_add_required_ward_fk(tmp_path):
+    database = tmp_path / "ward-reset.db"
+    migrate(database, "upgrade", "0003")
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO provinces (id, name, dataset_version, is_active) "
+            "VALUES ('01', 'Tỉnh A', 'test', 1)"
+        )
+        connection.execute(
+            "INSERT INTO wards (id, province_id, name, dataset_version, is_active) "
+            "VALUES ('001', '01', 'Phường A', 'test', 1)"
+        )
+        connection.execute(
+            "INSERT INTO users (id, name, email, password_hash) "
+            "VALUES (?, 'Test', 'test@example.com', 'test-only')",
+            (str(uuid4()),),
+        )
+        connection.execute(
+            "INSERT INTO observations "
+            "(id, city, temperature, humidity, wind_speed, rainfall, source, observed_at) "
+            "VALUES (?, 'hanoi', 25, 70, 10, 0, 'provider', '2026-11-04 00:00:00')",
+            (str(uuid4()),),
+        )
+        before = {
+            table: connection.execute(f"SELECT * FROM {table} ORDER BY id").fetchall()
+            for table in ("users", "provinces", "wards")
+        }
+    migrate(database, "upgrade", "head")
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        assert connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 0
+        for table, rows in before.items():
+            assert connection.execute(f"SELECT * FROM {table} ORDER BY id").fetchall() == rows
+        columns = {row[1]: row for row in connection.execute("PRAGMA table_info(observations)")}
+        assert "city" not in columns
+        assert columns["ward_id"][3] == 1
+        assert any(
+            row[2] == "wards" and row[3] == "ward_id" and row[4] == "id"
+            for row in connection.execute("PRAGMA foreign_key_list(observations)")
+        )
+        statement = (
+            "INSERT INTO observations "
+            "(id, ward_id, temperature, humidity, wind_speed, rainfall, source, observed_at) "
+            "VALUES (?, ?, 25, 70, 10, 0, 'provider', '2026-11-04 01:00:00')"
+        )
+        for ward_id in (None, "missing"):
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(statement, (str(uuid4()), ward_id))
+        connection.execute(statement, (str(uuid4()), "001"))
+        assert connection.execute("SELECT COUNT(*) FROM observations").fetchone()[0] == 1

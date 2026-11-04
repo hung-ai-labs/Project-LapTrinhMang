@@ -10,16 +10,16 @@ from app.core.config import get_settings
 from app.db.session import get_session
 from app.main import app
 
-LIST_PATHS = ("/provinces", "/wards", "/weather/hanoi/history")
+LIST_PATHS = ("/provinces", "/wards", "/wards/001/weather/history")
 PUBLIC_PATHS = (
     "/health",
     "/provinces",
     "/provinces/01",
     "/wards",
     "/wards/001",
-    "/weather/hanoi/current",
-    "/weather/hanoi/history",
-    "/weather/hanoi/forecast",
+    "/wards/001/weather/current",
+    "/wards/001/weather/history",
+    "/wards/001/weather/forecast",
 )
 
 
@@ -92,21 +92,22 @@ def test_catalog_count_and_links_keep_search_and_province_filters(public_data, c
     assert client.get("/api/v1/wards/006").status_code == 404
 
 
-def test_history_pagination_keeps_city_source_and_stable_time_order(public_data, client):
-    first = client.get("/api/v1/weather/hanoi/history?page_size=2").json()["data"]
+def test_history_pagination_keeps_ward_source_and_stable_time_order(public_data, client):
+    first = client.get("/api/v1/wards/001/weather/history?page_size=2").json()["data"]
     assert first["count"] == 3
     assert [row["id"] for row in first["results"]] == [str(UUID(int=3)), str(UUID(int=2))]
     last = client.get(first["next"]).json()["data"]
     assert [row["id"] for row in last["results"]] == [str(UUID(int=1))]
     assert last["next"] is None
-    current = client.get("/api/v1/weather/hanoi/current").json()["data"]
-    forecast = client.get("/api/v1/weather/hanoi/forecast").json()["data"]
+    current = client.get("/api/v1/wards/001/weather/current").json()["data"]
+    forecast = client.get("/api/v1/wards/001/weather/forecast").json()["data"]
     assert current["observation"]["id"] == str(UUID(int=3))
-    assert forecast["based_on"] == str(UUID(int=3))
+    assert forecast["ward_id"] == "001"
+    assert forecast["method"] == "open_meteo_hourly"
     assert "results" not in current and "results" not in forecast
 
 
-@pytest.mark.parametrize("path", ["/provinces", "/wards", "/weather/hcm/history"])
+@pytest.mark.parametrize("path", ["/provinces", "/wards"])
 def test_empty_lists_are_wrapped_pages(client, path):
     response = client.get("/api/v1" + path)
     assert response.status_code == 200
@@ -178,7 +179,7 @@ def test_docs_group_models_describe_envelopes_and_keep_public_apis_anonymous(cli
     for path in PUBLIC_PATHS:
         template = path.replace("/provinces/01", "/provinces/{province_id}")
         template = template.replace("/wards/001", "/wards/{ward_id}")
-        template = template.replace("/weather/hanoi/", "/weather/{city}/")
+        template = template.replace("/wards/001/weather/", "/weather/{city}/")
         operation = schema["paths"]["/api/v1" + template]["get"]
         assert not operation.get("security")
         assert len(operation["tags"]) == 1
@@ -206,3 +207,13 @@ def test_removed_city_catalog_is_not_in_routes_or_openapi(client):
     assert "/api/v1/cities" not in schema["paths"]
     assert "City" not in {tag["name"] for tag in schema["tags"]}
     assert "CitiesOut" not in schema["components"]["schemas"]
+
+
+
+def test_empty_ward_history_is_a_wrapped_page(ward_catalog, client):
+    response = client.get("/api/v1/wards/003/weather/history")
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "data": {"count": 0, "next": None, "previous": None, "results": []},
+    }

@@ -188,10 +188,10 @@ cho thông tin cá nhân và địa chỉ mặc định; API địa chỉ riêng
 | Endpoint | Giao thức | Kết quả |
 |---|---|---|
 | `/api/v1/health` | HTTP GET | Kiểm tra DB, trả 503 khi không kết nối được |
-| `/api/v1/weather/{city}/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
-| `/api/v1/weather/{city}/history?page=1&page_size=60` | HTTP GET | Phân trang trong data, mới nhất trước |
-| `/api/v1/weather/{city}/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
-| `/api/v1/ws/weather/{city}` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
+| `/api/v1/wards/{ward_id}/weather/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
+| `/api/v1/wards/{ward_id}/weather/history?page=1&page_size=60` | HTTP GET | Phân trang trong data, mới nhất trước |
+| `/api/v1/wards/{ward_id}/weather/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
+| `/api/v1/ws/wards/{ward_id}/weather` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
 | `/api/v1/provinces` | HTTP GET | Tỉnh/thành active; q/page/page_size; công khai |
 | `/api/v1/wards?province_id=01` | HTTP GET | Phường/xã active; province_id/q/page/page_size; công khai |
 | `/api/v1/geography/nearest-ward` | HTTP POST | Tọa độ → ward gần nhất; công khai |
@@ -370,3 +370,32 @@ không có hàng đợi bền vững qua restart. Base chưa xử lý correction
 
 Nguồn: [Open-Meteo API](https://open-meteo.com/en/docs), dữ liệu [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Frontend có attribution. Ngưỡng cảnh báo vẫn là demo; AI dự báo vẫn là persistence baseline.
+
+
+## Dashboard theo phường/xã
+
+Chọn tỉnh/thành phố để tải danh sách phường/xã trong tỉnh đó, sau đó chọn phường/xã để xem
+thời tiết hiện tại, lịch sử và baseline dự báo. Bộ chọn dùng mã Province/Ward từ database,
+không dùng tên làm khóa; danh mục được đọc đủ các trang. Đổi tỉnh sẽ xóa Ward đang chọn và
+xóa số liệu địa điểm cũ; request/socket cũ được hủy để tránh lẫn dữ liệu.
+Tỉnh/thành dùng để lọc danh sách Ward, không có xã đại diện hoặc phép lấy trung bình toàn tỉnh.
+
+`Observation.ward_id` bắt buộc, FK tới `wards.id`; tỉnh/thành được tra qua `Ward.province_id`.
+API REST theo `/api/v1/wards/{ward_id}/weather/current|history|forecast`, WebSocket theo
+`/api/v1/ws/wards/{ward_id}/weather`; envelope `{success,data}` và phân trang `data.results`.
+Forecast vẫn là persistence baseline, không phải dự báo tương lai lấy từ Open-Meteo.
+
+Migration `0004` bỏ `city`, thêm `ward_id` và index theo Ward/nguồn/thời gian. Nếu bảng
+observations còn dữ liệu city cũ, migration sẽ dừng và giữ nguyên dữ liệu để người vận hành
+quyết định cách xử lý; không tự xóa, gán Ward hoặc tạo model lưu trữ.
+Chỉ chạy `alembic upgrade head` khi đã xử lý rõ dữ liệu city cũ.
+
+Collector dùng môi trường Python backend, đọc Ward active có tọa độ và Province active từ DB.
+Chạy từ `source/server` để đọc đúng `.env`: `python ../scripts/collect_open_meteo.py --ward-id 00004 --once`.
+Bỏ `--ward-id` để lấy toàn bộ Ward hợp lệ; có thể lặp cờ này để chọn nhiều Ward.
+HTTP chia lô 25 điểm, rải trong chu kỳ 900 giây; TCP sender chạy riêng với tối đa 5 event/giây,
+đối chiếu ACK event_id và SQLite outbox bền vững tối đa 20.000 event. Hàng đợi đầy thì ngừng
+lấy thêm dữ liệu; Docker live dùng volume collector_state. Batch giảm request mạng nhưng không
+đảm bảo giảm quota provider cùng tỷ lệ; cần cân đối quota và dung lượng DB khi lấy toàn quốc.
+Publisher giả lập cần Ward có thật: `python ../scripts/publish_weather.py --ward-id 00004`.
+Profile demo cũng cần nhập danh mục Ward trước khi phát dữ liệu.

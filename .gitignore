@@ -13,5 +13,6 @@ coverage/
 .idea/
 .DS_Store
 *.db
+.collector/
 *.log
 *.tsbuildinfo

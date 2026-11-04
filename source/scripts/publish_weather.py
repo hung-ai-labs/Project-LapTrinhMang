@@ -14,12 +14,12 @@ def main():
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--interval", type=float, default=3)
     parser.add_argument("--count", type=int, default=0, help="0 = chạy liên tục")
+    parser.add_argument("--ward-id", action="append", required=True, help="Mã Ward đã nhập vào DB")
     args = parser.parse_args()
     if args.interval <= 0 or args.count < 0:
         parser.error("interval > 0, count >= 0")
     pending = None
     tick = 0
-    cities = ["hanoi", "danang", "hcm"]
     while not args.count or tick < args.count:
         try:
             with socket.create_connection((args.host, args.port), timeout=10) as connection:
@@ -28,7 +28,7 @@ def main():
                     if pending is None:
                         pending = {
                             "event_id": str(uuid4()),
-                            "city": cities[tick % 3],
+                            "ward_id": args.ward_id[tick % len(args.ward_id)],
                             "temperature": round(30 + 7 * math.sin(tick / 5), 1),
                             "humidity": round(70 + 20 * math.cos(tick / 5), 1),
                             "wind_speed": round(20 + 35 * abs(math.sin(tick / 7)), 1),
@@ -43,7 +43,9 @@ def main():
                     ack = json.loads(response)
                     if ack.get("status") not in {"accepted", "duplicate"}:
                         raise ConnectionError(f"Server từ chối: {ack}")
-                    print(f"{pending['city']}: {ack}", flush=True)
+                    if ack.get("event_id") != pending["event_id"]:
+                        raise ConnectionError("ACK event_id không khớp")
+                    print(f"{pending['ward_id']}: {ack}", flush=True)
                     pending = None
                     tick += 1
                     time.sleep(args.interval)

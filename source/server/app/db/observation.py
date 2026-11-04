@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Index, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -8,10 +8,12 @@ from app.db.base import Base
 
 class Observation(Base):
     __tablename__ = "observations"
-    __table_args__ = (Index("ix_observations_city_time", "city", "observed_at"),)
+    __table_args__ = (Index("ix_observations_ward_time", "ward_id", "source", "observed_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    city: Mapped[str] = mapped_column(String(64), nullable=False)
+    ward_id: Mapped[str] = mapped_column(
+        ForeignKey("wards.id", ondelete="RESTRICT"), nullable=False
+    )
     temperature: Mapped[float] = mapped_column(Float, nullable=False)
     humidity: Mapped[float] = mapped_column(Float, nullable=False)
     wind_speed: Mapped[float] = mapped_column(Float, nullable=False)

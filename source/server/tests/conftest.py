@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -21,6 +22,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import Base, Observation, Province, Ward  # noqa: E402
 from app.db.session import Session, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.schemas.weather import ForecastOut  # noqa: E402
+from app.services.forecast import next_hour  # noqa: E402
 
 
 @pytest.fixture
@@ -37,7 +40,16 @@ def client():
 
 
 @pytest.fixture
-def public_data(client):
+def public_data(client, monkeypatch):
+    async def preview(ward_id, latitude, longitude):
+        now = datetime.now(UTC)
+        return ForecastOut(
+            ward_id=ward_id, target_at=next_hour(now), fetched_at=now,
+            predicted_temperature=31.5, predicted_humidity=79,
+            predicted_wind_speed=12.3, precipitation_mm=0.2,
+        )
+
+    monkeypatch.setattr(app.state.forecast_service, "get", AsyncMock(side_effect=preview))
     async def run():
         async with Session.begin() as session:
             session.add_all(
@@ -67,18 +79,19 @@ def public_data(client):
                         dataset_version="test",
                     )
                 )
+            await session.flush()
             start = datetime(2026, 10, 20, tzinfo=UTC)
-            for number, city, source, minutes in (
-                (1, "hanoi", "simulator", 0),
-                (2, "hanoi", "simulator", 1),
-                (3, "hanoi", "simulator", 1),
-                (4, "hanoi", "provider", 2),
-                (5, "danang", "simulator", 3),
+            for number, ward_id, source, minutes in (
+                (1, "001", "simulator", 0),
+                (2, "001", "simulator", 1),
+                (3, "001", "simulator", 1),
+                (4, "001", "provider", 2),
+                (5, "002", "simulator", 3),
             ):
                 session.add(
                     Observation(
                         id=str(UUID(int=number)),
-                        city=city,
+                        ward_id=ward_id,
                         source=source,
                         temperature=30,
                         humidity=70,
@@ -90,3 +103,15 @@ def public_data(client):
         await engine.dispose()
 
     asyncio.run(run())
+
+
+@pytest.fixture
+def ward_catalog(public_data):
+    from sqlalchemy import delete
+
+    async def clear():
+        async with Session.begin() as session:
+            await session.execute(delete(Observation))
+        await engine.dispose()
+
+    asyncio.run(clear())

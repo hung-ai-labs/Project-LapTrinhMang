@@ -4,13 +4,11 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-City = Literal["hanoi", "danang", "hcm"]
-
 
 class ObservationInput(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     event_id: UUID
-    city: City
+    ward_id: str = Field(min_length=1, max_length=20)
     temperature: float = Field(ge=-60, le=65)
     humidity: float = Field(ge=0, le=100)
     wind_speed: float = Field(ge=0, le=500, description="km/h")
@@ -22,7 +20,7 @@ class ObservationInput(BaseModel):
 class ObservationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
-    city: str
+    ward_id: str
     temperature: float
     humidity: float
     wind_speed: float
@@ -44,13 +42,18 @@ class WeatherEvent(BaseModel):
 
 
 class ForecastOut(BaseModel):
-    city: str
-    method: Literal["persistence_baseline"] = "persistence_baseline"
-    is_ai: bool = False
-    message: str = "Baseline giữ nguyên quan sát mới nhất; chưa tích hợp mô hình AI."
-    predicted_temperature: float
-    target_at: datetime
-    based_on: str
+    model_config = ConfigDict(allow_inf_nan=False)
+    ward_id: str
+    provider: Literal["open_meteo"] = "open_meteo"
+    method: Literal["open_meteo_hourly"] = "open_meteo_hourly"
+    data_kind: Literal["model_forecast"] = "model_forecast"
+    target_at: AwareDatetime
+    fetched_at: AwareDatetime
+    predicted_temperature: float = Field(ge=-60, le=65)
+    predicted_humidity: float = Field(ge=0, le=100)
+    predicted_wind_speed: float = Field(ge=0, le=500)
+    precipitation_mm: float = Field(ge=0)
+    interval_seconds: Literal[3600] = 3600
 
 
 class HealthOut(BaseModel):

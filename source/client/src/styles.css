@@ -85,21 +85,17 @@ main { min-width: 0; width: 100%; max-width: 1220px; margin: auto; padding: 32px
 .eyebrow { color: var(--focus); font-size: .625rem; letter-spacing: 1.6px; font-weight: 600; margin: 0 0 12px; }
 h1 { font-size: clamp(1.75rem, 4vw, 2.75rem); font-weight: 500; line-height: 1.2; letter-spacing: -1px; margin: 0; }
 .heading > div > p:last-child { color: var(--muted); font-size: .875rem; margin-bottom: 0; }
-/* Keep the popup above the dashboard's backdrop-filter stacking contexts. */
-.city-picker { position: relative; z-index: 5; flex-shrink: 0; width: 250px; color: var(--muted); font-size: .75rem; }
-.picker-label { display: block; margin-bottom: 8px; font-weight: 500; }
-.picker-trigger { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--control-border); color: #fff; background: var(--control-bg); box-shadow: inset 0 1px var(--border); text-align: left; font-size: .875rem; transition: background .18s, border-color .18s, box-shadow .18s; }
-.picker-trigger:hover, .picker-trigger[aria-expanded="true"] { background: var(--control-hover); border-color: var(--control-highlight); }
-.picker-trigger:focus-visible { outline: 2px solid var(--control-highlight); outline-offset: 3px; box-shadow: 0 0 0 5px var(--control-ring); }
-.picker-value { min-width: 0; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
-.picker-chevron { margin-left: auto; flex-shrink: 0; color: var(--muted); transition: transform .18s; }
-.picker-chevron.is-open { transform: rotate(180deg); }
-.picker-list { position: absolute; top: calc(100% + 8px); left: 0; right: 0; margin: 0; padding: 6px; list-style: none; max-height: 260px; overflow-y: auto; border-radius: 16px; border: 1px solid var(--control-border); background: var(--popup-bg); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 16px 40px #0c203f55, inset 0 1px var(--border); }
-.picker-option { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 60px; padding: 10px 12px; border-radius: 10px; color: #fff; font-size: .875rem; cursor: pointer; border: 1px solid transparent; }
-.picker-option small { display: block; margin-top: 3px; font-size: .6875rem; color: var(--muted); }
-.picker-option[aria-selected="true"] { background: var(--option-selected); }
-.picker-option.is-active { background: var(--option-hover); border-color: var(--control-border); }
-.picker-check { color: var(--control-highlight); font-size: 1rem; }
+/* Province scopes the Ward catalog; weather always belongs to the selected Ward. */
+.location-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: min(100%, 520px); flex-shrink: 0; }
+.location-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: var(--muted); font-size: .75rem; }
+.location-field select { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--control-border); border-radius: 12px; background: var(--control-bg); color: #fff; font: inherit; font-size: .875rem; cursor: pointer; }
+.location-field select option { color: #fff; background: #244668; }
+.location-field select:focus-visible { outline: 2px solid var(--control-highlight); outline-offset: 3px; }
+.location-field select:disabled { cursor: default; opacity: .65; }
+.location-context { color: var(--muted); margin: 8px 0 0; font-size: .8125rem !important; }
+.catalog-retry { border: 1px solid currentColor; border-radius: 6px; padding: 3px 10px; background: transparent; }
+@media (max-width: 1100px) { .heading { align-items: stretch; flex-direction: column; } }
+@media (max-width: 520px) { .location-filters { grid-template-columns: 1fr; } }
 .temperature { display: flex; align-items: center; font-size: clamp(4.5rem, 8vw, 6.5rem); font-weight: 200; letter-spacing: -5px; line-height: 1.2; margin-top: 20px; font-variant-numeric: tabular-nums; }
 .temperature > span:first-child { align-self: flex-start; margin: 16px 0 0 8px; font-size: 2rem; letter-spacing: -1px; color: var(--muted); }
 .temperature .condition-icon { margin-left: auto; padding: 0 16px; font-size: 4rem; color: var(--focus); letter-spacing: 0; }
@@ -183,8 +179,7 @@ footer p { margin: 4px 0; }
   ::-webkit-scrollbar-corner { background: transparent; }
 }
 @media (forced-colors: active) {
-  .picker-trigger, .picker-list, .picker-option.is-active { border-color: ButtonText; }
-  .picker-option[aria-selected="true"] { outline: 1px solid Highlight; outline-offset: -3px; }
+  .location-field select { border-color: ButtonText; }
   * { scrollbar-color: auto; }
 }
 
@@ -203,3 +198,6 @@ footer p { margin: 4px 0; }
 @media (prefers-reduced-motion: reduce) {
   .rainfall::before, .rainfall::after { will-change: auto; }
 }
+
+.forecast-refresh { align-self: flex-start; margin-top: 16px; }
+.forecast-refresh:disabled { opacity: .6; cursor: default; }

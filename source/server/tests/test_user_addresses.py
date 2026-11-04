@@ -78,7 +78,7 @@ def test_address_requires_identity_but_public_content_does_not(public_data, clie
         assert response.json()["success"] is False
         assert response.headers["www-authenticate"] == "Bearer"
     assert client.get("/api/v1/provinces").status_code == 200
-    assert client.get("/api/v1/weather/hanoi/current").status_code == 200
+    assert client.get("/api/v1/wards/001/weather/current").status_code == 200
 
 
 def test_invalid_or_inactive_wards_do_not_replace_a_saved_address(public_data, client):
