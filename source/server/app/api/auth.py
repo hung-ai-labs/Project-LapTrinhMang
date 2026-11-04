@@ -12,13 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
-from app.db.models import User
+from app.db import User
 from app.db.session import get_session
+from app.schemas.responses import ApiResponse, ErrorResponse, success
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", responses={401: {"model": ErrorResponse}})
 passwords = PasswordHash.recommended()
 dummy_hash = passwords.hash("unused-timing-comparison-password")
-bearer = HTTPBearer(auto_error=False)
+bearer = HTTPBearer(auto_error=False, bearerFormat="JWT")
 
 
 class LoginInput(BaseModel):
@@ -115,7 +116,10 @@ async def current_user(
         raise unauthorized() from exc
 
 
-@router.post("/register", response_model=TokenOut, status_code=201)
+@router.post(
+    "/register", response_model=ApiResponse[TokenOut], status_code=201, tags=["Auth"],
+    responses={409: {"model": ErrorResponse}},
+)
 async def register(
     value: RegisterInput, response: Response, session: AsyncSession = Depends(get_session)
 ):
@@ -135,10 +139,10 @@ async def register(
         await session.rollback()
         raise HTTPException(409, "Email đã được sử dụng.") from exc
     response.headers["Cache-Control"] = "no-store"
-    return token_for(user)
+    return success(token_for(user))
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=ApiResponse[TokenOut], tags=["Auth"])
 async def login(
     value: LoginInput, response: Response, session: AsyncSession = Depends(get_session)
 ):
@@ -150,17 +154,18 @@ async def login(
     if not user or not valid:
         raise unauthorized()
     response.headers["Cache-Control"] = "no-store"
-    return token_for(user)
+    return success(token_for(user))
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me", response_model=ApiResponse[UserOut], tags=["User"])
 async def me(user: User = Depends(current_user)):
-    return user
+    return success(user)
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", response_model=ApiResponse[None], tags=["Auth"])
 async def logout(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
     await session.execute(
         update(User).where(User.id == user.id).values(token_version=User.token_version + 1)
     )
     await session.commit()
+    return success(None)

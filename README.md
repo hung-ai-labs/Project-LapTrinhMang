@@ -154,16 +154,48 @@ cùng database để chạy `alembic upgrade head`. Không commit `.env` và kh�
 
 ## Giao tiếp và hợp đồng dữ liệu
 
+### Model và danh mục tỉnh/phường xã
+
+Backend dùng một file cho mỗi model trong `source/server/app/db/`, export qua `app.db`:
+`User`, `Observation`, `Province`, `Ward`. Base cung cấp `created_at` và `updated_at` chung;
+User giữ các trường JWT của main, có thêm địa chỉ và ward mặc định nullable.
+
+Snapshot đi kèm có 34 tỉnh/thành và 3.321 đơn vị cấp xã. Từ `source/server`, dùng môi trường
+Python backend và database đã cấu hình:
+
+```bash
+alembic upgrade head
+python ../scripts/import_administrative_units.py          # Chỉ kiểm tra, không ghi DB
+python ../scripts/import_administrative_units.py --apply  # Nhập toàn bộ danh mục
+```
+
+PR bổ sung một migration `0003_geographic_catalog.py` sau hai migration của main.
+Xem [thiết kế database](docs/05_THIET_KE_DATABASE.md),
+[snapshot và giấy phép](source/data/administrative/README.md),
+[kế hoạch kiểm thử](.plans/plan_process/2026-11-03-db-models-import-test-plan.md).
+
 ### REST / WebSocket
+
+REST API dùng response `{success, data}`; danh sách nằm trong
+`data.count/next/previous/results`, nhận `page` (mặc định 1) và `page_size`
+(mặc định 25, tối đa 100). Các liên kết trang là URL đầy đủ và giữ bộ lọc.
+Chi tiết request/response, lỗi và quyền truy cập: [API docs](docs/06_API.md).
+Swagger `/docs`, ReDoc `/redoc` và OpenAPI `/openapi.json` công khai, nhóm API theo model/chức năng.
+
+Xem thời tiết, tỉnh/xã và tìm xã gần nhất không cần đăng nhập. Tài khoản chỉ dùng
+cho thông tin cá nhân và địa chỉ mặc định; API địa chỉ riêng dùng JWT của chính user.
 
 | Endpoint | Giao thức | Kết quả |
 |---|---|---|
 | `/api/v1/health` | HTTP GET | Kiểm tra DB, trả 503 khi không kết nối được |
-| `/api/v1/cities` | HTTP GET | `hanoi`, `danang`, `hcm` |
-| `/api/v1/weather/{city}/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
-| `/api/v1/weather/{city}/history?limit=60` | HTTP GET | Mới nhất trước, giới hạn 1–500 bản tin |
-| `/api/v1/weather/{city}/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
-| `/api/v1/ws/weather/{city}` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
+| `/api/v1/wards/{ward_id}/weather/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
+| `/api/v1/wards/{ward_id}/weather/history?page=1&page_size=60` | HTTP GET | Phân trang trong data, mới nhất trước |
+| `/api/v1/wards/{ward_id}/weather/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
+| `/api/v1/ws/wards/{ward_id}/weather` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
+| `/api/v1/provinces` | HTTP GET | Tỉnh/thành active; q/page/page_size; công khai |
+| `/api/v1/wards?province_id=01` | HTTP GET | Phường/xã active; province_id/q/page/page_size; công khai |
+| `/api/v1/geography/nearest-ward` | HTTP POST | Tọa độ → ward gần nhất; công khai |
+| `/api/v1/users/me/address` | GET/PATCH/DELETE | Địa chỉ riêng của user; cần Bearer JWT |
 
 Timestamp đầu vào bắt buộc có timezone, chuẩn hóa UTC trước khi lưu bằng `TIMESTAMPTZ` trên PostgreSQL.
 UI hiển thị giờ Việt Nam. Đơn vị: nhiệt độ °C, độ ẩm %, tốc độ gió km/h, lượng mưa mm/h.
@@ -236,7 +268,7 @@ Sau khi stack demo chạy, ở root:
 ```bash
 curl http://localhost:8000/api/v1/health
 curl http://localhost:8000/api/v1/weather/hanoi/current
-curl 'http://localhost:8000/api/v1/weather/hanoi/history?limit=5'
+curl 'http://localhost:8000/api/v1/weather/hanoi/history?page=1&page_size=5'
 ```
 
 Demo nhiều tab: mở dashboard 3 tab, chọn 3 thành phố, theo dõi frame WebSocket ở DevTools.
@@ -309,7 +341,7 @@ JWT HS256 mặc định 30 phút, kiểm tra signature/issuer/audience/expiry v�
 | `/api/v1/auth/register` | POST JSON | `{name,email,password}` → token + user, email trùng 409 |
 | `/api/v1/auth/login` | POST JSON | `{email,password}` → token + user, sai thông tin 401 |
 | `/api/v1/auth/me` | GET Bearer JWT | Thông tin tài khoản, không trả password hash |
-| `/api/v1/auth/logout` | POST Bearer JWT | Thu hồi toàn bộ token hiện có của tài khoản, trả 204 |
+| `/api/v1/auth/logout` | POST Bearer JWT | Thu hồi token hiện có, HTTP 200 với success=true/data=null |
 
 Frontend đã nối form đăng ký/đăng nhập, hiện tên và đăng xuất. Token giữ trong RAM, không lưu localStorage;
 reload trang cần đăng nhập lại. Chưa có refresh token, Google login, xác minh email, quên mật khẩu hay rate limit.
@@ -338,3 +370,32 @@ không có hàng đợi bền vững qua restart. Base chưa xử lý correction
 
 Nguồn: [Open-Meteo API](https://open-meteo.com/en/docs), dữ liệu [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Frontend có attribution. Ngưỡng cảnh báo vẫn là demo; AI dự báo vẫn là persistence baseline.
+
+
+## Dashboard theo phường/xã
+
+Chọn tỉnh/thành phố để tải danh sách phường/xã trong tỉnh đó, sau đó chọn phường/xã để xem
+thời tiết hiện tại, lịch sử và baseline dự báo. Bộ chọn dùng mã Province/Ward từ database,
+không dùng tên làm khóa; danh mục được đọc đủ các trang. Đổi tỉnh sẽ xóa Ward đang chọn và
+xóa số liệu địa điểm cũ; request/socket cũ được hủy để tránh lẫn dữ liệu.
+Tỉnh/thành dùng để lọc danh sách Ward, không có xã đại diện hoặc phép lấy trung bình toàn tỉnh.
+
+`Observation.ward_id` bắt buộc, FK tới `wards.id`; tỉnh/thành được tra qua `Ward.province_id`.
+API REST theo `/api/v1/wards/{ward_id}/weather/current|history|forecast`, WebSocket theo
+`/api/v1/ws/wards/{ward_id}/weather`; envelope `{success,data}` và phân trang `data.results`.
+Forecast vẫn là persistence baseline, không phải dự báo tương lai lấy từ Open-Meteo.
+
+Migration `0004` bỏ `city`, thêm `ward_id` và index theo Ward/nguồn/thời gian. Nếu bảng
+observations còn dữ liệu city cũ, migration sẽ dừng và giữ nguyên dữ liệu để người vận hành
+quyết định cách xử lý; không tự xóa, gán Ward hoặc tạo model lưu trữ.
+Chỉ chạy `alembic upgrade head` khi đã xử lý rõ dữ liệu city cũ.
+
+Collector dùng môi trường Python backend, đọc Ward active có tọa độ và Province active từ DB.
+Chạy từ `source/server` để đọc đúng `.env`: `python ../scripts/collect_open_meteo.py --ward-id 00004 --once`.
+Bỏ `--ward-id` để lấy toàn bộ Ward hợp lệ; có thể lặp cờ này để chọn nhiều Ward.
+HTTP chia lô 25 điểm, rải trong chu kỳ 900 giây; TCP sender chạy riêng với tối đa 5 event/giây,
+đối chiếu ACK event_id và SQLite outbox bền vững tối đa 20.000 event. Hàng đợi đầy thì ngừng
+lấy thêm dữ liệu; Docker live dùng volume collector_state. Batch giảm request mạng nhưng không
+đảm bảo giảm quota provider cùng tỷ lệ; cần cân đối quota và dung lượng DB khi lấy toàn quốc.
+Publisher giả lập cần Ward có thật: `python ../scripts/publish_weather.py --ward-id 00004`.
+Profile demo cũng cần nhập danh mục Ward trước khi phát dữ liệu.

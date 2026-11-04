@@ -45,11 +45,16 @@ services:
       server:
         condition: service_healthy
   collector:
-    image: python:3.12-slim
+    build: ./source/server
     profiles: [live]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weather:weather@db:5432/weather}
+      PYTHONPATH: /app
     volumes:
       - ./source/scripts:/scripts:ro
-    command: ["python", "/scripts/collect_open_meteo.py", "--host", "server"]
+      - collector_state:/home/weather/.collector
+    command: ["python", "/scripts/collect_open_meteo.py", "--host", "server", "--outbox", "/home/weather/.collector/outbox.sqlite3"]
     depends_on:
       server:
         condition: service_healthy
@@ -58,9 +63,10 @@ services:
     profiles: [demo]
     volumes:
       - ./source/scripts:/scripts:ro
-    command: ["python", "/scripts/publish_weather.py", "--host", "server"]
+    command: ["python", "/scripts/publish_weather.py", "--host", "server", "--ward-id", "00004"]
     depends_on:
       server:
         condition: service_healthy
 volumes:
   weather_data:
+  collector_state:

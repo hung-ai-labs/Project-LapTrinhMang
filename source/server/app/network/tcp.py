@@ -5,13 +5,16 @@ import logging
 from pydantic import ValidationError
 
 from app.schemas.weather import ObservationInput
-from app.services.ingestion import ingest
+from app.services.ingestion import EventConflictError, InvalidWardError, ingest
 
 logger = logging.getLogger(__name__)
 MAX_FRAME_BYTES = 8192
 
 
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def handle_client(
+    reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+    *, ingestion_slots: asyncio.Semaphore,
+):
     """NDJSON frames: TCP is a byte stream, not a message transport."""
     try:
         while True:
@@ -25,10 +28,20 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 break
             try:
                 value = ObservationInput.model_validate_json(frame)
-                created = await ingest(value)
+                async with asyncio.timeout(20):
+                    async with ingestion_slots:
+                        created = await ingest(value)
                 response = {
                     "status": "accepted" if created else "duplicate",
                     "event_id": str(value.event_id),
+                }
+            except EventConflictError:
+                response = {
+                    "status": "error", "code": "event_conflict", "event_id": str(value.event_id),
+                }
+            except InvalidWardError:
+                response = {
+                    "status": "error", "code": "invalid_ward", "event_id": str(value.event_id),
                 }
             except ValidationError:
                 response = {"status": "error", "code": "invalid_observation"}

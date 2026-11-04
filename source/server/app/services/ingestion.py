@@ -2,15 +2,26 @@ from datetime import UTC
 
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Observation
+from app.db import Observation
 from app.db.session import Session
 from app.network.hub import hub
 from app.schemas.weather import ObservationInput, ObservationOut, WeatherEvent
 from app.services.alerts import evaluate_alerts
+from app.services.geography import active_ward
+
+
+class InvalidWardError(ValueError):
+    pass
+
+
+class EventConflictError(ValueError):
+    pass
 
 
 async def ingest(value: ObservationInput) -> bool:
     async with Session() as session:
+        if await active_ward(session, value.ward_id) is None:
+            raise InvalidWardError("Unknown or inactive ward")
         record = Observation(
             id=str(value.event_id),
             **value.model_dump(exclude={"event_id", "observed_at"}),
@@ -21,10 +32,19 @@ async def ingest(value: ObservationInput) -> bool:
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            if await session.get(Observation, str(value.event_id)) is not None:
+            existing = await session.get(Observation, str(value.event_id))
+            if existing is not None:
+                incoming = value.model_dump(exclude={"event_id", "observed_at"})
+                observed = existing.observed_at
+                if observed.tzinfo is None:
+                    observed = observed.replace(tzinfo=UTC)
+                matches = observed.astimezone(UTC) == value.observed_at.astimezone(UTC)
+                same_values = all(getattr(existing, key) == item for key, item in incoming.items())
+                if not matches or not same_values:
+                    raise EventConflictError("Event ID already exists with different values")
                 return False
             raise
         observation = ObservationOut.model_validate(record)
     event = WeatherEvent(observation=observation, alerts=evaluate_alerts(observation))
-    hub.publish(value.city, event.model_dump(mode="json"))
+    hub.publish(f"ward:{value.ward_id}", event.model_dump(mode="json"))
     return True

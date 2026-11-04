@@ -2,13 +2,20 @@ import json
 import socket
 from uuid import uuid4
 
+import pytest
+
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def stream_catalog(ward_catalog):
+    pass
 
 
 def observation(**changes):
     return {
         "event_id": str(uuid4()),
-        "city": "hanoi",
+        "ward_id": "001",
         "temperature": 36,
         "humidity": 80,
         "wind_speed": 55,
@@ -27,29 +34,30 @@ def connect():
 def send(value):
     with connect() as connection:
         connection.sendall((json.dumps(value) + "\n").encode())
-        return json.loads(connection.makefile("rb").readline())
+        with connection.makefile("rb") as stream:
+            return json.loads(stream.readline())
 
 
 def test_tcp_to_database_and_websocket(client):
-    with client.websocket_connect("/api/v1/ws/weather/hanoi") as ws:
+    with client.websocket_connect("/api/v1/ws/wards/001/weather") as ws:
         value = observation()
         assert send(value)["status"] == "accepted"
         event = ws.receive_json()
         assert event["observation"]["id"] == value["event_id"]
         assert {a["code"] for a in event["alerts"]} == {"heat", "rain", "wind"}
-    current = client.get("/api/v1/weather/hanoi/current").json()
+    current = client.get("/api/v1/wards/001/weather/current").json()["data"]
     assert current["observation"]["temperature"] == 36
     assert client.get("/api/v1/health").status_code == 200
-    forecast = client.get("/api/v1/weather/hanoi/forecast").json()
-    assert forecast["is_ai"] is False
-    assert forecast["method"] == "persistence_baseline"
+    forecast = client.get("/api/v1/wards/001/weather/forecast").json()["data"]
+    assert forecast["method"] == "open_meteo_hourly"
+    assert forecast["ward_id"] == "001"
 
 
 def test_retry_is_idempotent(client):
     value = observation()
     assert send(value)["status"] == "accepted"
     assert send(value)["status"] == "duplicate"
-    assert len(client.get("/api/v1/weather/hanoi/history").json()) == 1
+    assert client.get("/api/v1/wards/001/weather/history").json()["data"]["count"] == 1
 
 
 def test_tcp_split_and_coalesced_frames(client):
@@ -61,7 +69,7 @@ def test_tcp_split_and_coalesced_frames(client):
         stream = connection.makefile("rb")
         assert json.loads(stream.readline())["status"] == "accepted"
         assert json.loads(stream.readline())["status"] == "accepted"
-    assert len(client.get("/api/v1/weather/hanoi/history").json()) == 2
+    assert client.get("/api/v1/wards/001/weather/history").json()["data"]["count"] == 2
 
 
 def test_invalid_frame_does_not_kill_connection(client):
@@ -76,16 +84,16 @@ def test_invalid_frame_does_not_kill_connection(client):
     assert send(observation(observed_at="2026-10-20T12:00:00"))["status"] == "error"
 
 
-def test_city_isolation_and_empty_state(client):
-    assert client.get("/api/v1/weather/hanoi/current").status_code == 404
-    assert client.get("/api/v1/weather/unknown/history").status_code == 422
-    assert client.get("/api/v1/weather/hanoi/history?limit=999").status_code == 422
-    with client.websocket_connect("/api/v1/ws/weather/hanoi") as ws:
-        send(observation(city="danang"))
+def test_ward_isolation_and_empty_state(client):
+    assert client.get("/api/v1/wards/001/weather/current").status_code == 404
+    assert client.get("/api/v1/wards/unknown/weather/history").status_code == 404
+    assert client.get("/api/v1/wards/001/weather/history?page_size=101").status_code == 422
+    with client.websocket_connect("/api/v1/ws/wards/001/weather") as ws:
+        send(observation(ward_id="002"))
         value = observation()
         send(value)
         assert ws.receive_json()["observation"]["id"] == value["event_id"]
-    assert len(client.get("/api/v1/weather/danang/history").json()) == 1
+    assert client.get("/api/v1/wards/002/weather/history").json()["data"]["count"] == 1
 
 
 def test_oversized_tcp_frame_is_rejected(client):
@@ -97,5 +105,5 @@ def test_oversized_tcp_frame_is_rejected(client):
 
 def test_provider_does_not_mix_into_simulator_history(client):
     send(observation(source="provider"))
-    assert client.get("/api/v1/weather/hanoi/history").json() == []
-    assert client.get("/api/v1/weather/hanoi/current").status_code == 404
+    assert client.get("/api/v1/wards/001/weather/history").json()["data"]["results"] == []
+    assert client.get("/api/v1/wards/001/weather/current").status_code == 404
