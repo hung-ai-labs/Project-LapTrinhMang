@@ -26,7 +26,8 @@ from app.schemas.weather import (
     ObservationOut,
     WeatherEvent,
 )
-from app.services.alerts import evaluate_alerts
+from app.services.current import CurrentUnavailable
+from app.services.events import event_from_record
 from app.services.forecast import ForecastUnavailable
 from app.services.geography import active_ward
 
@@ -34,8 +35,16 @@ router = APIRouter(responses={404: {"model": ErrorResponse}})
 
 
 async def require_ward(session: AsyncSession, ward_id: str):
-    if await active_ward(session, ward_id) is None:
+    ward = await active_ward(session, ward_id)
+    if ward is None:
         raise HTTPException(404, "Không tìm thấy phường/xã đang hoạt động.")
+    return ward
+
+
+def require_coordinates(ward, purpose: str) -> tuple[float, float]:
+    if ward.latitude is None or ward.longitude is None:
+        raise HTTPException(422, f"Phường/xã chưa có tọa độ để {purpose}.")
+    return float(ward.latitude), float(ward.longitude)
 
 
 @router.get("/health", response_model=ApiResponse[HealthOut], tags=["Health"])
@@ -59,9 +68,10 @@ async def history(
     session: AsyncSession = Depends(get_session),
 ):
     await require_ward(session, ward_id)
+    settings = get_settings()
     statement = (
         select(Observation)
-        .where(Observation.ward_id == ward_id, Observation.source == get_settings().weather_source)
+        .where(Observation.ward_id == ward_id, Observation.source == settings.weather_source)
         .order_by(Observation.observed_at.desc(), Observation.id.desc())
     )
     return success(await paginate_query(
@@ -81,15 +91,33 @@ async def current_weather(ward_id: str, session: AsyncSession) -> WeatherEvent:
         raise HTTPException(
             404, "Chưa có dữ liệu cho nguồn đã chọn. Hãy chạy collector hoặc publisher tương ứng."
         )
-    observation = ObservationOut.model_validate(record)
-    return WeatherEvent(observation=observation, alerts=evaluate_alerts(observation))
+    return event_from_record(record)
 
 
 @router.get(
     "/wards/{ward_id}/weather/current", response_model=ApiResponse[WeatherEvent],
     tags=["Observation"],
 )
-async def current(ward_id: str, session: AsyncSession = Depends(get_session)):
+async def current(
+    request: Request,
+    response: Response,
+    ward_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    response.headers["Cache-Control"] = "no-store"
+    if get_settings().weather_source == "provider":
+        ward = await require_ward(session, ward_id)
+        latitude, longitude = require_coordinates(ward, "lấy thời tiết")
+        await session.rollback()
+        try:
+            event = await request.app.state.current_service.get_current(
+                ward_id, latitude, longitude
+            )
+        except CurrentUnavailable as exc:
+            raise HTTPException(
+                503, "Chưa lấy được dữ liệu Open-Meteo. Vui lòng thử lại."
+            ) from exc
+        return success(event)
     return success(await current_weather(ward_id, session))
 
 
@@ -101,12 +129,8 @@ async def forecast(
     session: AsyncSession = Depends(get_session),
 ):
     response.headers["Cache-Control"] = "no-store"
-    ward = await active_ward(session, ward_id)
-    if ward is None:
-        raise HTTPException(404, "Không tìm thấy phường/xã đang hoạt động.")
-    if ward.latitude is None or ward.longitude is None:
-        raise HTTPException(422, "Phường/xã chưa có tọa độ để lấy dự báo.")
-    latitude, longitude = float(ward.latitude), float(ward.longitude)
+    ward = await require_ward(session, ward_id)
+    latitude, longitude = require_coordinates(ward, "lấy dự báo")
     await session.rollback()  # Release the read transaction before waiting on the provider.
     try:
         value = await request.app.state.forecast_service.get(ward_id, latitude, longitude)

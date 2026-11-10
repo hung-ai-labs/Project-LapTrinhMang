@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     enable_tcp: bool = True
     jwt_secret: SecretStr = SecretStr("")
     jwt_expire_minutes: int = Field(default=30, ge=1, le=1440)
-    weather_source: str = "provider"
+    weather_source: Literal["simulator", "provider"] = "provider"
 
 
 @lru_cache

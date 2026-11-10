@@ -16,3 +16,4 @@ coverage/
 .collector/
 *.log
 *.tsbuildinfo
+tmp/

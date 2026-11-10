@@ -1,14 +1,13 @@
 """On-demand hourly previews; never persist forecast values as observations."""
 
 import asyncio
-import json
 from datetime import UTC, datetime, timedelta
 
 import httpx
 
 from app.schemas.weather import ForecastOut
+from app.services.open_meteo import WEATHER_VARIABLES, fetch_json
 
-HOURLY_VARIABLES = "temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation"
 MAX_RESPONSE_BYTES = 256 * 1024
 
 
@@ -33,7 +32,7 @@ def parse_hourly(ward_id: str, payload: dict, target: datetime, fetched_at: date
         if not isinstance(times, list) or any(type(value) is not int for value in times):
             raise ForecastUnavailable("Invalid forecast timestamps")
         index = times.index(int(target.timestamp()))
-        values = [hourly[key][index] for key in HOURLY_VARIABLES.split(",")]
+        values = [hourly[key][index] for key in WEATHER_VARIABLES.split(",")]
         if any(value is None or isinstance(value, bool) for value in values):
             raise ForecastUnavailable("Missing forecast value")
         return ForecastOut(
@@ -41,6 +40,8 @@ def parse_hourly(ward_id: str, payload: dict, target: datetime, fetched_at: date
             predicted_temperature=values[0], predicted_humidity=values[1],
             predicted_wind_speed=values[2], precipitation_mm=values[3],
         )
+    except ForecastUnavailable:
+        raise
     except (AttributeError, KeyError, IndexError, TypeError, ValueError) as exc:
         raise ForecastUnavailable("Invalid or unavailable hourly forecast") from exc
 
@@ -84,29 +85,20 @@ class OpenMeteoForecast:
 
     async def _load(self, key, target):
         ward_id, latitude, longitude, _ = key
-        try:
-            async with asyncio.timeout(12):
-                async with self.slots:
-                    async with self.client.stream(
-                        "GET", "https://api.open-meteo.com/v1/forecast",
-                        params={
-                            "latitude": latitude, "longitude": longitude,
-                            "hourly": HOURLY_VARIABLES, "forecast_hours": 3,
-                            "temperature_unit": "celsius", "wind_speed_unit": "kmh",
-                            "precipitation_unit": "mm", "timeformat": "unixtime",
-                            "timezone": "UTC",
-                        },
-                        headers={"User-Agent": "WeatherStream-Education/0.3"},
-                    ) as response:
-                        response.raise_for_status()
-                        body = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
-                                raise ForecastUnavailable("Forecast response is too large")
-                            body.extend(chunk)
-                    return parse_hourly(ward_id, json.loads(body), target, self.clock())
-        except (httpx.HTTPError, TimeoutError, ValueError, TypeError) as exc:
-            raise ForecastUnavailable("Forecast provider unavailable") from exc
+        async with self.slots:
+            payload = await fetch_json(
+                self.client,
+                {
+                    "latitude": latitude, "longitude": longitude,
+                    "hourly": WEATHER_VARIABLES, "forecast_hours": 3,
+                    "temperature_unit": "celsius", "wind_speed_unit": "kmh",
+                    "precipitation_unit": "mm", "timeformat": "unixtime",
+                    "timezone": "UTC",
+                },
+                max_bytes=MAX_RESPONSE_BYTES,
+                error_cls=ForecastUnavailable,
+            )
+        return parse_hourly(ward_id, payload, target, self.clock())
 
     async def aclose(self):
         tasks = tuple(self.inflight.values())

@@ -25,6 +25,7 @@ services:
       TCP_PORT: 9000
       ENABLE_TCP: "true"
       JWT_SECRET: ${JWT_SECRET:-}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-30}
       WEATHER_SOURCE: ${WEATHER_SOURCE:-provider}
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"

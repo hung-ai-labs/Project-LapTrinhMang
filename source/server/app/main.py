@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.db.session import engine
 from app.network.tcp import MAX_FRAME_BYTES, handle_client
 from app.schemas.responses import ErrorResponse
+from app.services.current import OpenMeteoCurrent
 from app.services.forecast import OpenMeteoForecast
 
 
@@ -26,11 +27,12 @@ async def lifespan(app: FastAPI):
     server = None
     clients: set[asyncio.Task] = set()
     ingestion_slots = asyncio.Semaphore(4)
-    forecast_client = httpx.AsyncClient(
+    provider_client = httpx.AsyncClient(
         timeout=httpx.Timeout(10.0, connect=5.0),
-        limits=httpx.Limits(max_connections=2, max_keepalive_connections=2),
+        limits=httpx.Limits(max_connections=6, max_keepalive_connections=4),
     )
-    app.state.forecast_service = OpenMeteoForecast(forecast_client)
+    app.state.forecast_service = OpenMeteoForecast(provider_client)
+    app.state.current_service = OpenMeteoCurrent(provider_client)
 
     async def tcp_client(reader, writer):
         task = asyncio.current_task()
@@ -57,8 +59,9 @@ async def lifespan(app: FastAPI):
             await asyncio.gather(*pending, return_exceptions=True)
         if server:
             await server.wait_closed()
+        await app.state.current_service.aclose()
         await app.state.forecast_service.aclose()
-        await forecast_client.aclose()
+        await provider_client.aclose()
         await engine.dispose()
 
 

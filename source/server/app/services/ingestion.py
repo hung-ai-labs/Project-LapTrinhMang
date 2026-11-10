@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from app.db import Observation
 from app.db.session import Session
 from app.network.hub import hub
-from app.schemas.weather import ObservationInput, ObservationOut, WeatherEvent
-from app.services.alerts import evaluate_alerts
+from app.schemas.weather import ObservationInput
+from app.services.events import event_from_record
 from app.services.geography import active_ward
 
 
@@ -44,7 +44,6 @@ async def ingest(value: ObservationInput) -> bool:
                     raise EventConflictError("Event ID already exists with different values")
                 return False
             raise
-        observation = ObservationOut.model_validate(record)
-    event = WeatherEvent(observation=observation, alerts=evaluate_alerts(observation))
+    event = event_from_record(record)
     hub.publish(f"ward:{value.ward_id}", event.model_dump(mode="json"))
     return True
