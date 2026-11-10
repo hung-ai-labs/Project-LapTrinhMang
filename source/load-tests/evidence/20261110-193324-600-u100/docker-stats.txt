@@ -1,0 +1,5 @@
+weather-loadtest-server-1 CPU=96.43% Memory=75.25MiB / 11.54GiB
+weather-loadtest-simulator-1 CPU=0.02% Memory=11.29MiB / 11.54GiB
+weather-loadtest-client-1 CPU=30.34% Memory=26.47MiB / 11.54GiB
+weather-loadtest-db-1 CPU=33.76% Memory=49.85MiB / 11.54GiB
+weather-stream-collector-1 CPU=0.01% Memory=92.5MiB / 11.54GiB
