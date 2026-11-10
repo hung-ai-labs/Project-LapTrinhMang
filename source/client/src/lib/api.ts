@@ -55,10 +55,43 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+export const REQUEST_TIMEOUT_MS = 10000;
+
+export function networkError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  const name = error instanceof Error ? error.name : "";
+  if (name === "TimeoutError" || name === "AbortError") {
+    return new ApiError("Máy chủ không phản hồi. Kiểm tra kết nối mạng.", 0);
+  }
+  return new ApiError("Không kết nối được tới máy chủ.", 0);
+}
+
+/** True when the request failed because the server could not be reached. */
+export function isConnectionError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 0;
+}
+
+export function withTimeout(signal?: AbortSignal, ms = REQUEST_TIMEOUT_MS): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  if (!signal) return timeout;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([signal, timeout]);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal.addEventListener("abort", abort, { once: true });
+  timeout.addEventListener("abort", abort, { once: true });
+  return controller.signal;
+}
+
 export async function api<T>(
   path: string, signal?: AbortSignal, cache: RequestCache = "default",
 ): Promise<T> {
-  const response = await fetch(`/api/v1${path}`, { signal, cache });
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1${path}`, { signal: withTimeout(signal), cache });
+  } catch (error) {
+    throw networkError(error);
+  }
   const body = await response.json().catch(() => null);
   if (!response.ok || body?.success !== true) {
     throw new ApiError(

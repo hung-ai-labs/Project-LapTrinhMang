@@ -247,6 +247,20 @@ DB là nguồn lịch sử. React reconnect theo exponential backoff tối đa 1
 Client còn giám sát heartbeat 15 giây của server: quá 45 giây không có bản tin thì tự đóng socket
 và reconnect, trạng thái hiển thị “Mất kết nối · đang thử lại” → “Đang đồng bộ dữ liệu” → “Đang trực tuyến”.
 
+### Mất mạng và phục hồi
+
+Danh mục tỉnh/xã và lịch sử nằm trong PostgreSQL (Neon theo mặc định), nên khi mất mạng thì cả
+client lẫn server đều mất dữ liệu. Hệ thống xử lý theo hai lớp.
+
+**Client**
+
+- Danh mục tỉnh/xã, quan sát hiện tại, lịch sử và dự báo đều được ghi nhớ trong `localStorage`
+  và hiển thị ngay khi mở app, kể cả khi đang mất mạng.
+- Mọi nguồn dữ liệu tự thử lại theo backoff 1s → 10s và giữ nguyên bản gần nhất khi lỗi.
+- Khi trình duyệt báo `online` thì WebSocket nối lại ngay (không chờ hết backoff) và danh mục,
+  current, lịch sử, dự báo được tải lại đồng thời.
+- Trong lúc mất kết nối, giao diện chỉ hiện **một thông báo** và đánh dấu “dữ liệu cũ” / “dự báo cũ”; khi có mạng lại thì mọi thông báo biến mất.
+
 ## Kiểm thử và demo
 
 ```bash

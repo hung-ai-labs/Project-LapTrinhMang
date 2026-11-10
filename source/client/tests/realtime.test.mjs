@@ -9,7 +9,7 @@ const code = ts.transpileModule(readFileSync(new URL('../src/lib/realtime.ts', i
 }).outputText;
 const context = { exports: {}, Math, Number };
 vm.runInNewContext(code, context);
-const { backoffDelay, heartbeatExpired, HEARTBEAT_TIMEOUT_MS } = context.exports;
+const { backoffDelay, nextRetryDelay, heartbeatExpired, HEARTBEAT_TIMEOUT_MS } = context.exports;
 
 test('backoff doubles per attempt and stops at the 15s cap', () => {
   assert.equal(backoffDelay(0), 1000);
@@ -18,6 +18,17 @@ test('backoff doubles per attempt and stops at the 15s cap', () => {
   assert.equal(backoffDelay(3), 8000);
   assert.equal(backoffDelay(4), 15000);
   assert.equal(backoffDelay(20), 15000);
+});
+
+test('catalog retry backs off up to 10s', () => {
+  assert.equal(nextRetryDelay(0), 1000);
+  assert.equal(nextRetryDelay(1), 2000);
+  assert.equal(nextRetryDelay(2), 4000);
+  assert.equal(nextRetryDelay(3), 8000);
+  assert.equal(nextRetryDelay(4), 10000);
+  assert.equal(nextRetryDelay(5), 10000);
+  assert.equal(nextRetryDelay(30), 10000);
+  assert.equal(nextRetryDelay(-1), 1000);
 });
 
 test('invalid attempts fall back to the base delay', () => {

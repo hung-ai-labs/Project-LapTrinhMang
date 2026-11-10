@@ -54,9 +54,10 @@ function Dashboard({ onNavigate, locations, view }: {
   }, []);
   const [logoutError, setLogoutError] = useState("");
   const { event, history, historyError, historyLoading, forecast, forecastError,
-    forecastLoading, requestForecast, status, error } = useWeather(locations.effectiveWardId, {
-    historyEnabled: view === "/history" || locations.historyEnabled,
-  });
+    forecastLoading, forecastStale, requestForecast, status, error, stale, offline } = useWeather(
+    locations.effectiveWardId, { historyEnabled: view === "/history" || locations.historyEnabled },
+  );
+  const disconnected = offline || locations.offline || !locations.online;
   const period = useDayPeriod();
   const current = event?.observation;
   // Scenes illustrate observations because the API does not expose condition codes.
@@ -115,13 +116,16 @@ function Dashboard({ onNavigate, locations, view }: {
                 disabled={!locations.provinceId || locations.wardLoading || !locations.wards.length}>
                 <option value="">{locations.wardLoading ? "Đang tải phường/xã…" :
                   !locations.provinceId ? "Chọn tỉnh/thành trước" :
-                  locations.wards.length ? `Mặc định: ${locations.wards[0].name} — chưa chọn thủ công` : "Chưa có phường/xã"}</option>
+                  locations.wards.length ? `Mặc định: ${locations.wards[0].name} — chưa chọn thủ công${locations.catalogFromCache ? " (bộ nhớ đệm)" : ""}` : "Chưa có phường/xã"}</option>
                 {locations.wards.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
               </select>
             </label>
           </div>
         </section>
         {logoutError && <p role="alert">{logoutError}</p>}
+        {disconnected && <p className="notice" role="status">
+          Mất kết nối — đang thử lại tự động. Số liệu đang hiển thị là bản gần nhất.
+        </p>}
         {locations.error && <p className="notice" role="alert">{locations.error}{" "}
           <button type="button" className="catalog-retry" onClick={locations.reload}>Thử lại</button>
         </p>}
@@ -141,7 +145,7 @@ function Dashboard({ onNavigate, locations, view }: {
               <span className="condition-icon" aria-hidden="true">{scene === "rain" ? "☂" : scene === "wind" ? "≋" : scene === "clear" ? (period === "night" ? "☾" : "☀") : "☁"}</span>
             </div>
             <p className="condition-label">{condition}</p>
-            <p className="updated">{current ? `Cập nhật ${time(current.observed_at)} · giờ Việt Nam` : locations.effectiveWardId ? "Chưa có dữ liệu thời tiết cho phường/xã này" : "Chọn tỉnh/thành và phường/xã để xem thời tiết"}</p>
+            <p className="updated">{current ? `Cập nhật ${time(current.observed_at)} · giờ Việt Nam${stale ? " · dữ liệu cũ" : ""}` : locations.effectiveWardId ? "Chưa có dữ liệu thời tiết cho phường/xã này" : "Chọn tỉnh/thành và phường/xã để xem thời tiết"}</p>
             <div className="metrics">
               <div><small>Độ ẩm</small><strong>{current?.humidity ?? "—"}<em>%</em></strong></div>
               <div><small>Tốc độ gió</small><strong>{current?.wind_speed ?? "—"}<em>km/h</em></strong></div>
@@ -154,8 +158,9 @@ function Dashboard({ onNavigate, locations, view }: {
             {forecast ? <>
               <p>Độ ẩm {forecast.predicted_humidity}% · Gió {forecast.predicted_wind_speed} km/h</p>
               <p>Giáng thủy giờ kết thúc lúc {time(forecast.target_at)}: {forecast.precipitation_mm} mm</p>
-              <small>Open-Meteo · Dự báo mô hình · Lấy lúc {time(forecast.fetched_at)} · Giờ Việt Nam</small>
-            </> : <p role="status">{forecastLoading ? "Đang lấy dự báo…" : forecastError || "Chọn địa điểm để xem dự báo."}</p>}
+              <small>Open-Meteo · Dự báo mô hình · Lấy lúc {time(forecast.fetched_at)} · Giờ Việt Nam{forecastStale ? " · dự báo cũ" : ""}</small>
+            </> : <p role="status">{forecastLoading ? "Đang lấy dự báo…" : forecastError ||
+              (locations.effectiveWardId ? "Chưa có dự báo." : "Chọn địa điểm để xem dự báo.")}</p>}
             <button type="button" className="catalog-retry forecast-refresh"
               disabled={!locations.effectiveWardId || forecastLoading} onClick={requestForecast}>
               {forecastLoading ? "Đang lấy dự báo…" : "Làm mới dự báo"}
