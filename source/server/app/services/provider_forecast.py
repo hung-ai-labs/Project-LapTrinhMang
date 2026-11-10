@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.services.open_meteo import BASE_URL, USER_AGENT, hourly_series
+
 LOCATIONS = {
     "hanoi": (21.0285, 105.8542),
     "danang": (16.0544, 108.2022),
@@ -75,16 +77,15 @@ def parse_forecast(city, payload):
         "precipitation_probability_max": "%",
         "wind_speed_10m_max": "km/h",
     }
-    for name, units in [("hourly", expected), ("daily", daily_units)]:
-        block = payload[name]
-        if not block["time"]:
-            raise ValueError("Empty forecast")
-        for key, unit in units.items():
-            if payload[name + "_units"][key] != unit:
-                raise ValueError("Unexpected forecast units")
-            if len(block[key]) != len(block["time"]):
-                raise ValueError("Mismatched forecast arrays")
-    h, d = payload["hourly"], payload["daily"]
+    times, h = hourly_series(payload, expected)
+    d = payload["daily"]
+    if not d["time"]:
+        raise ValueError("Empty forecast")
+    for key, unit in daily_units.items():
+        if payload["daily_units"][key] != unit:
+            raise ValueError("Unexpected forecast units")
+        if len(d[key]) != len(d["time"]):
+            raise ValueError("Mismatched forecast arrays")
     return ProviderForecast(
         city=city,
         retrieved_at=datetime.now(UTC),
@@ -97,7 +98,7 @@ def parse_forecast(city, payload):
                 precipitation=h[HOURLY[3]][i],
                 rain_probability=h[HOURLY[4]][i],
             )
-            for i, t in enumerate(h["time"])
+            for i, t in enumerate(times)
         ],
         daily=[
             DayForecast(
@@ -117,7 +118,7 @@ async def fetch_forecast(city, days):
     lat, lon = LOCATIONS[city]
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.get(
-            "https://api.open-meteo.com/v1/forecast",
+            BASE_URL,
             params={
                 "latitude": lat,
                 "longitude": lon,
@@ -130,6 +131,7 @@ async def fetch_forecast(city, days):
                 "wind_speed_unit": "kmh",
                 "precipitation_unit": "mm",
             },
+            headers={"User-Agent": USER_AGENT},
         )
         response.raise_for_status()
         return parse_forecast(city, response.json())

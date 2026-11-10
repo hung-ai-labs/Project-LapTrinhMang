@@ -56,6 +56,46 @@ class ForecastOut(BaseModel):
     interval_seconds: Literal[3600] = 3600
 
 
+class FutureForecastUnits(BaseModel):
+    temperature: Literal["°C"] = "°C"
+    humidity: Literal["%"] = "%"
+    wind_speed: Literal["km/h"] = "km/h"
+    rainfall: Literal["mm/giờ"] = "mm/giờ"
+    rain_probability: Literal["%"] = "%"
+    rain: Literal["mm/giờ"] = "mm/giờ"
+    showers: Literal["mm/giờ"] = "mm/giờ"
+
+
+class FutureHourOut(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    time: AwareDatetime
+    temperature: float | None = Field(default=None, ge=-60, le=65)
+    humidity: float | None = Field(default=None, ge=0, le=100)
+    wind_speed: float | None = Field(default=None, ge=0, le=500)
+    rainfall: float | None = Field(default=None, ge=0, le=1000)
+    rain_probability: float | None = Field(default=None, ge=0, le=100)
+    rain: float | None = Field(default=None, ge=0, le=1000)
+    showers: float | None = Field(default=None, ge=0, le=1000)
+    weather_code: int | None = Field(default=None, ge=0, le=99)
+
+
+class FutureForecastOut(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    ward_id: str
+    ward_name: str
+    province_id: str
+    source: Literal["open-meteo"] = "open-meteo"
+    data_kind: Literal["model_forecast"] = "model_forecast"
+    is_project_ai: bool = False
+    timezone: Literal["Asia/Ho_Chi_Minh"] = "Asia/Ho_Chi_Minh"
+    retrieved_at: AwareDatetime
+    days: Literal[7] = 7
+    hours: int = Field(ge=0, le=168)
+    interval_seconds: Literal[3600] = 3600
+    units: FutureForecastUnits = Field(default_factory=FutureForecastUnits)
+    hourly: list[FutureHourOut]
+
+
 class HealthOut(BaseModel):
     status: str
     database: str

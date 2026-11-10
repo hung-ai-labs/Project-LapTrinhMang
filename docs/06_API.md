@@ -135,3 +135,18 @@ Cache trong RAM 15 phút theo city/days, các request cùng lúc dùng lại k�
 
 Trang `/forecast?city=hanoi` có bộ chọn thành phố, 3/7/16 ngày, thẻ từng ngày và bảng theo giờ.
 Nguồn và đơn vị theo [tài liệu Open-Meteo](https://open-meteo.com/en/docs).
+
+### Dự báo 7 ngày theo phường/xã
+
+`GET /api/v1/wards/{ward_id}/weather/future` — công khai, cố định 7 ngày, không có query `days`.
+Trả `success/data` gồm `ward_id`, `ward_name`, `province_id`, `source=open-meteo`,
+`data_kind=model_forecast`, `is_project_ai=false`, `retrieved_at`, `timezone`, `days=7`,
+`hours`, `interval_seconds=3600`, `units` và `hourly`.
+
+- `hourly` có tối đa 168 mốc, bắt đầu từ giờ tròn kế tiếp và kéo dài đủ 7 ngày.
+- `time` và `retrieved_at` theo giờ Việt Nam (`+07:00`); `temperature` °C, `humidity` %, `wind_speed` km/h.
+- `rainfall` là mm tích lũy trong một giờ, tương đương mm/h khi interval 3600 giây.
+- `rain_probability` %, `rain` và `showers` là mm trong một giờ, `weather_code` là mã WMO.
+- Giá trị thiếu giữ null. HTTP 503 nếu provider lỗi/timeout hoặc dữ liệu không hợp lệ.
+- Cache RAM 15 phút theo ward/tọa độ; không ghi forecast vào bảng observations.
+- Response có `Cache-Control: no-store`.

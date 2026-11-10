@@ -22,6 +22,7 @@ from app.network.hub import hub
 from app.schemas.responses import ApiResponse, ErrorResponse, PaginatedData, success
 from app.schemas.weather import (
     ForecastOut,
+    FutureForecastOut,
     HealthOut,
     ObservationOut,
     WeatherEvent,
@@ -30,6 +31,7 @@ from app.services.current import CurrentUnavailable
 from app.services.events import event_from_record
 from app.services.forecast import ForecastUnavailable
 from app.services.geography import active_ward
+from app.services.ward_future_forecast import FutureForecastUnavailable
 
 router = APIRouter(responses={404: {"model": ErrorResponse}})
 
@@ -135,6 +137,28 @@ async def forecast(
     try:
         value = await request.app.state.forecast_service.get(ward_id, latitude, longitude)
     except ForecastUnavailable as exc:
+        raise HTTPException(503, "Chưa lấy được dự báo Open-Meteo. Vui lòng thử lại.") from exc
+    return success(value)
+
+
+@router.get(
+    "/wards/{ward_id}/weather/future", response_model=ApiResponse[FutureForecastOut],
+    tags=["Forecast"],
+)
+async def future_forecast(
+    request: Request, response: Response, ward_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    response.headers["Cache-Control"] = "no-store"
+    ward = await require_ward(session, ward_id)
+    ward_name, province_id = ward.name, ward.province_id
+    latitude, longitude = require_coordinates(ward, "lấy dự báo")
+    await session.rollback()
+    try:
+        value = await request.app.state.future_forecast_service.get(
+            ward_id, ward_name, province_id, latitude, longitude
+        )
+    except FutureForecastUnavailable as exc:
         raise HTTPException(503, "Chưa lấy được dự báo Open-Meteo. Vui lòng thử lại.") from exc
     return success(value)
 

@@ -191,6 +191,7 @@ cho thông tin cá nhân và địa chỉ mặc định; API địa chỉ riêng
 | `/api/v1/wards/{ward_id}/weather/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
 | `/api/v1/wards/{ward_id}/weather/history?page=1&page_size=60` | HTTP GET | Phân trang trong data, mới nhất trước |
 | `/api/v1/wards/{ward_id}/weather/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
+| `/api/v1/wards/{ward_id}/weather/future` | HTTP GET | Open-Meteo 7 ngày theo giờ; 168 mốc; không lưu DB |
 | `/api/v1/ws/wards/{ward_id}/weather` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
 | `/api/v1/provinces` | HTTP GET | Tỉnh/thành active; q/page/page_size; công khai |
 | `/api/v1/wards?province_id=01` | HTTP GET | Phường/xã active; province_id/q/page/page_size; công khai |
@@ -413,6 +414,10 @@ API mới: `GET /api/v1/weather/{city}/provider-forecast?days=7`. Đơn vị mư
 daily là mm/ngày. Giá trị null hiển thị “—”. Đây là dự báo mô hình Open-Meteo, **không phải AI của nhóm**
 hoặc cảnh báo khí tượng chính thức. Không cần migration; dữ liệu forecast được cache trong RAM,
 không lưu vào bảng observations. Chi tiết xem [API](docs/06_API.md).
+
+API dự báo theo Ward: `GET /api/v1/wards/{ward_id}/weather/future` cố định 7 ngày, trả tối đa
+168 mốc giờ bắt đầu từ giờ tròn kế tiếp. Dùng `rainfall` (mm/giờ), `rain_probability`, `rain`,
+`showers`, `weather_code`; thời gian trả về theo giờ Việt Nam (`+07:00`). Dữ liệu chỉ cache RAM, không ghi DB.
 
 ### Điều hướng giao diện
 

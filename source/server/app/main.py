@@ -19,6 +19,7 @@ from app.network.tcp import MAX_FRAME_BYTES, handle_client
 from app.schemas.responses import ErrorResponse
 from app.services.current import OpenMeteoCurrent
 from app.services.forecast import OpenMeteoForecast
+from app.services.ward_future_forecast import OpenMeteoWardFuture
 
 
 @asynccontextmanager
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.forecast_service = OpenMeteoForecast(provider_client)
     app.state.current_service = OpenMeteoCurrent(provider_client)
+    app.state.future_forecast_service = OpenMeteoWardFuture(provider_client)
 
     async def tcp_client(reader, writer):
         task = asyncio.current_task()
