@@ -201,3 +201,12 @@ footer p { margin: 4px 0; }
 
 .forecast-refresh { align-self: flex-start; margin-top: 16px; }
 .forecast-refresh:disabled { opacity: .6; cursor: default; }
+/* Shared page navigation: real links with an active-page indicator. */
+.page-header { flex-wrap: wrap; }
+.page-tabs { display: flex; align-items: center; gap: 22px; }
+.page-tabs a { display: inline-flex; align-items: center; min-height: 44px; padding: 9px 0; color: var(--muted); border-bottom: 3px solid transparent; font-size: .875rem; white-space: nowrap; }
+.page-tabs a:hover { color: #fff; border-bottom-color: var(--control-border); }
+.page-tabs a[aria-current="page"] { color: var(--focus); border-bottom-color: var(--focus); font-weight: 600; }
+.dashboard.single-page { grid-template-columns: minmax(0, 1fr); }
+@media(max-width:1000px) { .page-tabs { order: 3; flex-basis: 100%; justify-content: center; } }
+@media(max-width:520px) { .page-tabs { gap: 0; justify-content: space-between; } .page-tabs a { font-size: .8125rem; padding: 9px 7px; } }

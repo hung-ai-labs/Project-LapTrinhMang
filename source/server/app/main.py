@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException
 from app.api.auth import router as auth_router
 from app.api.errors import http_error_handler, server_error_handler, validation_error_handler
 from app.api.geography import router as geography_router
+from app.api.provider_forecast import router as provider_router
 from app.api.routes import router
 from app.api.users import router as users_router
 from app.core.config import get_settings
@@ -98,3 +99,5 @@ app.include_router(router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(geography_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
+
+app.include_router(provider_router, prefix="/api/v1")

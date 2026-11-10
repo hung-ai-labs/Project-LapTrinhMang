@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { auth, getAuthSession } from "./lib/auth";
+import { auth, getAuthSession, restoreAuthSession } from "./lib/auth";
+import PageTabs from "./components/PageTabs";
+import ProviderForecastPage from "./components/ProviderForecastPage";
+import type { City } from "./lib/api";
 import AuthPage from "./components/AuthPage";
 import { useDayPeriod } from "./hooks/useDayPeriod";
 import { useWeather } from "./hooks/useWeather";
@@ -11,6 +14,8 @@ const time = (value: string) => new Date(value).toLocaleTimeString("vi-VN", {
 
 export default function App() {
   const [path, setPath] = useState(window.location.pathname);
+  const [forecastCity, setForecastCity] = useState<City>("hanoi");
+  const locations = useLocations();
   useEffect(() => {
     const sync = () => setPath(window.location.pathname);
     window.addEventListener("popstate", sync);
@@ -18,26 +23,39 @@ export default function App() {
   }, []);
   const navigate = (next: string) => {
     window.history.pushState({}, "", next);
-    setPath(next);
+    setPath(window.location.pathname);
+    window.scrollTo({ top: 0, behavior: "instant" });
   };
   if (path === "/login" || path === "/register") {
     return <AuthPage onGuest={() => navigate("/")} />;
   }
-  return <Dashboard onNavigate={navigate} />;
+  if (path === "/forecast") return <ProviderForecastPage onNavigate={navigate} city={forecastCity} onCityChange={setForecastCity} />;
+  return <Dashboard onNavigate={navigate} locations={locations} view={path} />;
 }
 
-function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
+function Dashboard({ onNavigate, locations, view }: {
+  onNavigate: (path: string) => void; locations: ReturnType<typeof useLocations>; view: string;
+}) {
   const [account, setAccount] = useState(getAuthSession);
   useEffect(() => {
     const expired = () => { setAccount(null); setLogoutError("Phiên đăng nhập đã hết hạn."); };
+    let disposed = false;
+    const validate = () => {
+      void restoreAuthSession().then(restored => { if (!disposed) setAccount(restored); });
+    };
     window.addEventListener("auth-expired", expired);
-    return () => window.removeEventListener("auth-expired", expired);
+    window.addEventListener("focus", validate);
+    validate();
+    return () => {
+      disposed = true;
+      window.removeEventListener("auth-expired", expired);
+      window.removeEventListener("focus", validate);
+    };
   }, []);
   const [logoutError, setLogoutError] = useState("");
-  const locations = useLocations();
   const { event, history, historyError, historyLoading, forecast, forecastError,
     forecastLoading, requestForecast, status, error } = useWeather(locations.effectiveWardId, {
-    historyEnabled: locations.historyEnabled,
+    historyEnabled: view === "/history" || locations.historyEnabled,
   });
   const period = useDayPeriod();
   const current = event?.observation;
@@ -59,6 +77,7 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
             <span aria-hidden="true">☁</span>
             <span>Weather Stream<small>TRẠM THỜI TIẾT TRỰC TUYẾN</small></span>
           </a>
+          <PageTabs onNavigate={onNavigate} />
           <div className="account-actions">
             {account ? <>
               <span>{account.user.name}</span>
@@ -76,7 +95,7 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
         <section className="heading">
           <div>
             <p className="eyebrow">QUAN SÁT · DỰ BÁO · CẢNH BÁO</p>
-            <h1>Thời tiết trong tầm mắt.</h1>
+            <h1>{view === "/history" ? "Lịch sử thời tiết." : view === "/alerts" ? "Cảnh báo thời tiết." : "Thời tiết trong tầm mắt."}</h1>
             <p>Dữ liệu liên tục, cập nhật qua từng bản tin.</p>
           </div>
           <div className="location-filters" aria-label="Chọn địa điểm theo dõi">
@@ -109,7 +128,8 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
         {!locations.provinceLoading && !locations.error && !locations.provinces.length &&
           <p className="notice" role="status">Chưa có danh mục tỉnh/thành phố.</p>}
         {error && <p className="notice" role="status">{error}</p>}
-        <div className="dashboard">
+        <div className={`dashboard ${view === "/history" || view === "/alerts" ? "single-page" : ""}`}>
+          {view !== "/history" && view !== "/alerts" && <>
           <section className="glass current" aria-label="Thời tiết hiện tại">
             <div className="section-heading">
               <h2 className="city-name">{locations.effectiveWard?.name ?? "Chọn phường/xã"}</h2>
@@ -141,12 +161,13 @@ function Dashboard({ onNavigate }: { onNavigate: (path: string) => void }) {
               {forecastLoading ? "Đang lấy dự báo…" : "Làm mới dự báo"}
             </button>
           </section>
-          <section className="glass alerts" aria-live="polite">
+          </>}
+          {view !== "/history" && <section className="glass alerts" aria-live="polite">
             <h2><span aria-hidden="true">⚠</span> Cảnh báo thời tiết</h2>
             {!event ? <p>Chưa có dữ liệu để đánh giá.</p> : !event.alerts.length ? <p>Chưa ghi nhận chỉ số vượt ngưỡng.</p> : event.alerts.map((alert) => <p className="alert" key={alert.code}>{alert.message}</p>)}
             <small>Ngưỡng demo · Không thay thế cảnh báo khí tượng chính thức</small>
-          </section>
-          {locations.historyEnabled && <section className="glass history">
+          </section>}
+          {view !== "/alerts" && (locations.historyEnabled || view === "/history") && <section className="glass history">
             <div className="section-heading"><h2>Lịch sử quan sát</h2><span>{history.length} / 60 bản tin</span></div>
             {historyError && <p role="alert">{historyError}</p>}
             <div className="table-wrap" tabIndex={0} role="region" aria-label="Bảng lịch sử thời tiết">

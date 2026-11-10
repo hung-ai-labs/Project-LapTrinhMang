@@ -1,3 +1,5 @@
+// The standalone multi-day forecast page currently supports these three cities.
+export type City = "hanoi" | "danang" | "hcm";
 export interface Province {
   id: string;
   name: string;

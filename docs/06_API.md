@@ -92,7 +92,7 @@ Tài khoản phục vụ thông tin cá nhân và lưu địa chỉ mặc địn
 
 Register nhận name/email/password; login nhận email/password. Password dài 8–128 ký tự. TokenOut gồm access_token, token_type=bearer, expires_in và user. Lấy token tại `response.data.access_token`. Các endpoint cấp token cần JWT_SECRET hợp lệ; API công khai không bị ảnh hưởng nếu chưa cấu hình key.
 
-Swagger có nút Authorize để nhập access token khi thử API cá nhân. Client hiện giữ token trong bộ nhớ, reload cần đăng nhập lại; chưa có refresh-token API.
+Swagger có nút Authorize để nhập access token khi thử API cá nhân. Client lưu token trong sessionStorage theo tab, reload giữ phiên trong cùng tab; đóng tab/hết hạn cần đăng nhập lại; chưa có refresh-token API.
 
 ## Địa chỉ riêng của user
 
@@ -118,3 +118,20 @@ Response data gồm address_text, ward và province. Xóa địa chỉ không x�
 ## WebSocket
 
 `/api/v1/ws/weather/{city}` công khai và không cần token. Event weather.update/heartbeat giữ giao thức trong README và không chứa email/địa chỉ riêng. WebSocket không được liệt kê như HTTP operation trong OpenAPI.
+
+## Dự báo tương lai Open-Meteo
+
+`GET /api/v1/weather/{city}/provider-forecast?days=7` — công khai, `days` từ 1 đến 16.
+Trả `success/data` gồm `source=open-meteo`, `is_project_ai=false`, `retrieved_at`, `timezone`,
+`hourly` và `daily`. HTTP 502 nếu provider timeout, lỗi hoặc dữ liệu không hợp lệ; không trả số liệu giả.
+Cache trong RAM 15 phút theo city/days, các request cùng lúc dùng lại kết quả sau khi fetch thành công.
+
+- Hourly: `time` UTC, `temperature` °C, `humidity` %, `wind_speed` km/h,
+  `precipitation` mm tích lũy trong giờ trước mốc hiển thị, `rain_probability` %.
+- Daily: `date` theo giờ Việt Nam, nhiệt độ min/max, tổng mưa mm/ngày,
+  xác suất mưa cao nhất và gió cao nhất. Giá trị thiếu giữ null, UI hiện “—”.
+- `retrieved_at` là thời điểm lấy dữ liệu, không phải thời điểm model được phát hành.
+- Dự báo provider được phục vụ riêng; không ghi vào observations hoặc thay thế baseline tại `/forecast`.
+
+Trang `/forecast?city=hanoi` có bộ chọn thành phố, 3/7/16 ngày, thẻ từng ngày và bảng theo giờ.
+Nguồn và đơn vị theo [tài liệu Open-Meteo](https://open-meteo.com/en/docs).

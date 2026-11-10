@@ -128,12 +128,15 @@ def test_provider_timeout_is_explicit():
 def test_concurrency_limit_and_bounded_queue(hourly_payload):
     async def scenario():
         gate = asyncio.Event()
+        two_started = asyncio.Event()
         active, maximum = 0, 0
 
         async def handler(request):
             nonlocal active, maximum
             active += 1
             maximum = max(maximum, active)
+            if active == 2:
+                two_started.set()
             await gate.wait()
             active -= 1
             return httpx.Response(200, json=hourly_payload)
@@ -149,6 +152,8 @@ def test_concurrency_limit_and_bounded_queue(hourly_payload):
                 await asyncio.sleep(0)
             with pytest.raises(ForecastUnavailable, match="queue"):
                 await service.get("extra", 21, 105)
+            # Inflight registration happens before HTTP handlers actually start.
+            await asyncio.wait_for(two_started.wait(), timeout=2)
             gate.set()
             await asyncio.gather(*tasks)
             assert maximum == 2

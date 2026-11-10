@@ -343,8 +343,8 @@ JWT HS256 mặc định 30 phút, kiểm tra signature/issuer/audience/expiry v�
 | `/api/v1/auth/me` | GET Bearer JWT | Thông tin tài khoản, không trả password hash |
 | `/api/v1/auth/logout` | POST Bearer JWT | Thu hồi token hiện có, HTTP 200 với success=true/data=null |
 
-Frontend đã nối form đăng ký/đăng nhập, hiện tên và đăng xuất. Token giữ trong RAM, không lưu localStorage;
-reload trang cần đăng nhập lại. Chưa có refresh token, Google login, xác minh email, quên mật khẩu hay rate limit.
+Frontend đã nối form đăng ký/đăng nhập, hiện tên và đăng xuất. Token lưu trong sessionStorage theo tab, không lưu localStorage;
+reload giữ phiên trong cùng tab; đóng tab/hết hạn cần đăng nhập lại. Chưa có refresh token, Google login, xác minh email, quên mật khẩu hay rate limit.
 Weather API vẫn công khai cho khách. Trước triển khai Internet cần HTTPS và giới hạn đăng nhập tại gateway.
 
 ### Open-Meteo
@@ -383,12 +383,12 @@ Tỉnh/thành dùng để lọc danh sách Ward, không có xã đại diện ho
 `Observation.ward_id` bắt buộc, FK tới `wards.id`; tỉnh/thành được tra qua `Ward.province_id`.
 API REST theo `/api/v1/wards/{ward_id}/weather/current|history|forecast`, WebSocket theo
 `/api/v1/ws/wards/{ward_id}/weather`; envelope `{success,data}` và phân trang `data.results`.
-Forecast vẫn là persistence baseline, không phải dự báo tương lai lấy từ Open-Meteo.
+Forecast giờ kế tiếp theo Ward hiện lấy hourly từ Open-Meteo, không phải persistence baseline hay AI của nhóm.
 
-Migration `0004` bỏ `city`, thêm `ward_id` và index theo Ward/nguồn/thời gian. Nếu bảng
-observations còn dữ liệu city cũ, migration sẽ dừng và giữ nguyên dữ liệu để người vận hành
-quyết định cách xử lý; không tự xóa, gán Ward hoặc tạo model lưu trữ.
-Chỉ chạy `alembic upgrade head` khi đã xử lý rõ dữ liệu city cũ.
+Migration `0004` hiện có `DELETE FROM observations`, sau đó bỏ `city`, thêm `ward_id`
+và index theo Ward/nguồn/thời gian. **Chạy migration này sẽ xóa toàn bộ lịch sử quan sát cũ.**
+Không chạy trên Neon trước khi sao lưu và thống nhất cách chuyển đổi dữ liệu; việc pull code
+không đồng nghĩa đã cho phép xóa dữ liệu.
 
 Collector dùng môi trường Python backend, đọc Ward active có tọa độ và Province active từ DB.
 Chạy từ `source/server` để đọc đúng `.env`: `python ../scripts/collect_open_meteo.py --ward-id 00004 --once`.
@@ -399,3 +399,30 @@ lấy thêm dữ liệu; Docker live dùng volume collector_state. Batch giảm 
 đảm bảo giảm quota provider cùng tỷ lệ; cần cân đối quota và dung lượng DB khi lấy toàn quốc.
 Publisher giả lập cần Ward có thật: `python ../scripts/publish_weather.py --ward-id 00004`.
 Profile demo cũng cần nhập danh mục Ward trước khi phát dữ liệu.
+## Trang dự báo Open-Meteo
+
+Mở `/forecast` hoặc chọn “Dự báo Open-Meteo” trên dashboard. Hỗ trợ ba thành phố,
+xem 3/7/16 ngày và chi tiết nhiệt độ, độ ẩm, gió, lượng mưa/xác suất mưa theo giờ.
+Chọn từng ngày để xem tối đa 24 giờ của ngày đó; mặc định xem tối đa 24 mốc dự báo sắp tới.
+Frontend kiểm tra lại mỗi 15 phút; backend cache 15 phút. Lỗi provider có thông báo/thử lại;
+không dùng simulator thay thế. Bản dự báo lấy trước đó được giữ nếu lần refresh tự động bị lỗi.
+
+API mới: `GET /api/v1/weather/{city}/provider-forecast?days=7`. Đơn vị mưa hourly là mm trong một giờ,
+daily là mm/ngày. Giá trị null hiển thị “—”. Đây là dự báo mô hình Open-Meteo, **không phải AI của nhóm**
+hoặc cảnh báo khí tượng chính thức. Không cần migration; dữ liệu forecast được cache trong RAM,
+không lưu vào bảng observations. Chi tiết xem [API](docs/06_API.md).
+
+### Điều hướng giao diện
+
+Thanh điều hướng dùng chung có Tổng quan (`/`), Lịch sử (`/history`), Cảnh báo (`/alerts`)
+và Dự báo (`/forecast`). Chuyển trang giữ thành phố đang chọn trong phiên giao diện và hỗ trợ
+Back/Forward; link Dự báo không còn dùng query string để quyết định route.
+Trang Lịch sử hiện dùng 60 quan sát gần nhất; trang Cảnh báo hiển thị ngưỡng demo trên quan sát
+mới nhất, chưa có lịch sử các đợt cảnh báo. Vite/Nginx hỗ trợ tải trực tiếp các đường dẫn này.
+
+## Chạy bằng PyCharm
+
+Xem [hướng dẫn Run/Debug PyCharm](docs/07_CHAY_PYCHARM.md).
+Launcher tại `source/scripts/run_dev.py` chạy backend + React, tùy chọn collector theo Ward;
+không tự migrate hay reset dữ liệu. Từ root: `source/server/.venv/bin/python source/scripts/run_dev.py`.
+Kiểm tra cấu hình không khởi động server: thêm `--check`.
