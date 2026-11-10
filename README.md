@@ -261,6 +261,14 @@ client lẫn server đều mất dữ liệu. Hệ thống xử lý theo hai l�
   current, lịch sử, dự báo được tải lại đồng thời.
 - Trong lúc mất kết nối, giao diện chỉ hiện **một thông báo** và đánh dấu “dữ liệu cũ” / “dự báo cũ”; khi có mạng lại thì mọi thông báo biến mất.
 
+**Server**
+
+- Danh mục được cache trong RAM 10 phút.
+- Khi database không truy cập được, `/api/v1/provinces` và `/api/v1/wards` vẫn trả bản cache kèm
+  header `X-Data-Stale: true` (503 nếu chưa có bản cache nào), WebSocket vẫn mở để stream trong
+  bộ nhớ tiếp tục chạy.
+- Kết nối database có timeout 5 giây nên lỗi hiện ra nhanh thay vì treo.
+
 ## Kiểm thử và demo
 
 ```bash

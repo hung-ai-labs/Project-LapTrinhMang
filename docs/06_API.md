@@ -79,6 +79,19 @@ curl 'http://localhost:8000/api/v1/geography/nearest-ward' \
 
 Nearest trả data gồm ward, province, distance_km và match_type=nearest. Haversine chọn tọa độ đại diện gần nhất, không xác định ranh giới chính xác. API không lưu GPS hay tự sửa tài khoản. Không có ward có tọa độ trả 404.
 
+### Danh mục khi database không truy cập được
+
+`/provinces` và `/wards` được phục vụ từ cache trong RAM (TTL 10 phút).
+
+- Database bình thường: HTTP 200, không có header `X-Data-Stale`.
+- Database lỗi nhưng còn bản cache: HTTP 200 kèm `X-Data-Stale: true`; dữ liệu là bản cache cũ.
+- Database lỗi và chưa có bản cache: HTTP 503 với message
+  “Chưa tải được danh mục tỉnh/thành (mất kết nối cơ sở dữ liệu). Thử lại sau.”.
+- Kết nối database timeout sau 5 giây nên lỗi trả về nhanh thay vì treo request.
+
+WebSocket `/ws/wards/{ward_id}/weather` vẫn accept khi database lỗi (hub chỉ phát event theo ward),
+nên luồng realtime trong bộ nhớ không bị dừng; `ward_id` lúc đó không được xác thực từ database.
+
 ## Tài khoản là tùy chọn
 
 Tài khoản phục vụ thông tin cá nhân và lưu địa chỉ mặc định. Dashboard, thời tiết, địa danh và docs đều xem được khi là khách.

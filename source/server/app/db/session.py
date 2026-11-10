@@ -3,7 +3,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 
-engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
+DATABASE_URL = get_settings().database_url
+engine_options: dict = {"pool_pre_ping": True}
+if DATABASE_URL.startswith("postgresql"):
+    # Fail fast instead of hanging when the managed database cannot be reached.
+    engine_options.update(
+        pool_timeout=5, pool_recycle=1800, connect_args={"connect_timeout": 5}
+    )
+engine = create_async_engine(DATABASE_URL, **engine_options)
 
 if engine.dialect.name == "sqlite":
 

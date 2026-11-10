@@ -23,7 +23,22 @@ from app.db import Base, Observation, Province, Ward  # noqa: E402
 from app.db.session import Session, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.schemas.weather import ForecastOut  # noqa: E402
+from app.services.catalog import catalog_cache  # noqa: E402
 from app.services.forecast import next_hour  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def reset_catalog_cache():
+    """The catalog cache is process wide; every test starts with an empty one."""
+
+    def clear():
+        catalog_cache.provinces = []
+        catalog_cache.wards = {}
+        catalog_cache.loaded_at = 0.0
+
+    clear()
+    yield
+    clear()
 
 
 @pytest.fixture

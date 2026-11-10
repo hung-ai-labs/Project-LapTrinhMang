@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime
 
 from fastapi import (
@@ -12,6 +13,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.pagination import paginate_query
@@ -34,6 +36,7 @@ from app.services.geography import active_ward
 from app.services.ward_future_forecast import FutureForecastUnavailable
 
 router = APIRouter(responses={404: {"model": ErrorResponse}})
+logger = logging.getLogger(__name__)
 
 
 async def require_ward(session: AsyncSession, ward_id: str):
@@ -170,9 +173,14 @@ async def weather_socket(websocket: WebSocket, ward_id: str):
         await websocket.close(code=1008)
         return
     async with Session() as session:
-        if await active_ward(session, ward_id) is None:
-            await websocket.close(code=1008)
-            return
+        try:
+            ward = await active_ward(session, ward_id)
+        except SQLAlchemyError:
+            logger.warning("Database unavailable; accepting the socket without ward validation")
+        else:
+            if ward is None:
+                await websocket.close(code=1008)
+                return
     await websocket.accept()
     async with hub.subscribe(f"ward:{ward_id}") as queue:
         try:

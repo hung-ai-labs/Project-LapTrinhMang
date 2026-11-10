@@ -14,6 +14,7 @@ Chưa có MSSV, họ tên đầy đủ hoặc GitHub username nên để bổ su
 - [x] TCP NDJSON, validation, ACK, UUID chống trùng khi retry, giới hạn frame và timeout.
 - [x] Publisher dữ liệu mô phỏng, retry khi mất kết nối.
 - [x] WebSocket theo thành phố, heartbeat, giới hạn hàng đợi; React tự reconnect và tải bù REST.
+- [x] Phục hồi sau mất mạng: watchdog heartbeat, tự thử lại danh mục, cache RAM phía server, banner trạng thái.
 - [x] Dashboard, lịch sử, cảnh báo theo ngưỡng demo; dự báo persistence baseline.
 - [x] Docker Compose, kiểm thử backend và CI build frontend/stack.
 - [ ] Dữ liệu thời tiết thật và mô hình AI đã huấn luyện/đánh giá: **chưa có**.

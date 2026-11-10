@@ -1,32 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.pagination import paginate_query
+from app.api.pagination import pagination_response
 from app.db import Province, Ward
 from app.db.session import get_session
 from app.schemas.geography import NearestWardInput, NearestWardOut, ProvinceOut, WardOut
 from app.schemas.responses import ApiResponse, ErrorResponse, PaginatedData, success
+from app.services.catalog import CatalogUnavailable, catalog_cache
 from app.services.geography import active_ward, nearest_active_ward
 
 router = APIRouter(responses={404: {"model": ErrorResponse}})
+
+CATALOG_UNAVAILABLE = (
+    "Chưa tải được danh mục tỉnh/thành (mất kết nối cơ sở dữ liệu). Thử lại sau."
+)
 
 
 @router.get("/provinces", response_model=ApiResponse[PaginatedData[ProvinceOut]], tags=["Province"])
 async def provinces(
     request: Request,
+    response: Response,
     q: str = Query(default="", max_length=150),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    statement = (
-        select(Province)
-        .where(Province.is_active.is_(True), Province.name.icontains(q, autoescape=True))
-        .order_by(Province.name, Province.id)
-    )
+    try:
+        records, stale = await catalog_cache.province_rows(session)
+    except CatalogUnavailable as exc:
+        raise HTTPException(503, CATALOG_UNAVAILABLE) from exc
+    if stale:
+        response.headers["X-Data-Stale"] = "true"
+    filtered = [row for row in records if not q or q.lower() in row.name.lower()]
+    window = filtered[(page - 1) * page_size: page * page_size]
     return success(
-        await paginate_query(session, statement, request, page=page, page_size=page_size)
+        pagination_response(request, window, count=len(filtered), page=page, page_size=page_size)
     )
 
 
@@ -41,26 +49,23 @@ async def province(province_id: str, session: AsyncSession = Depends(get_session
 @router.get("/wards", response_model=ApiResponse[PaginatedData[WardOut]], tags=["Ward"])
 async def wards(
     request: Request,
+    response: Response,
     province_id: str | None = Query(default=None, min_length=1, max_length=20),
     q: str = Query(default="", max_length=150),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
-    statement = (
-        select(Ward)
-        .join(Province, Province.id == Ward.province_id)
-        .where(
-            Ward.is_active.is_(True),
-            Province.is_active.is_(True),
-            Ward.name.icontains(q, autoescape=True),
-        )
-        .order_by(Ward.name, Ward.id)
-    )
-    if province_id is not None:
-        statement = statement.where(Ward.province_id == province_id)
+    try:
+        records, stale = await catalog_cache.ward_rows(session, province_id)
+    except CatalogUnavailable as exc:
+        raise HTTPException(503, CATALOG_UNAVAILABLE) from exc
+    if stale:
+        response.headers["X-Data-Stale"] = "true"
+    filtered = [row for row in records if not q or q.lower() in row.name.lower()]
+    window = filtered[(page - 1) * page_size: page * page_size]
     return success(
-        await paginate_query(session, statement, request, page=page, page_size=page_size)
+        pagination_response(request, window, count=len(filtered), page=page, page_size=page_size)
     )
 
 
