@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { catalog, type Province, type Ward } from "../lib/api";
 
+const DEFAULT_PROVINCE_ID = "01";
+const DEFAULT_WARD_ID = "00004";
+
 export function useLocations() {
   const [provinces, setProvinces] = useState<Province[]>([]);
   const [provinceLoading, setProvinceLoading] = useState(true);
@@ -21,8 +24,11 @@ export function useLocations() {
     void catalog<Province>("/provinces", controller.signal).then((records) => {
       if (controller.signal.aborted) return;
       setProvinces(records);
-      setSelection((current) => records.some((row) => row.id === current.provinceId)
-        ? current : { provinceId: null, wardId: null });
+      setSelection((current) => {
+        if (records.some((row) => row.id === current.provinceId)) return current;
+        const fallback = records.find((row) => row.id === DEFAULT_PROVINCE_ID);
+        return { provinceId: fallback?.id ?? null, wardId: null };
+      });
     }).catch((error) => {
       if (!controller.signal.aborted) {
         setProvinceError(error instanceof Error ? error.message : "Không tải được tỉnh/thành.");
@@ -42,9 +48,13 @@ export function useLocations() {
     ).then((options) => {
       if (controller.signal.aborted) return;
       setWardCatalog({ provinceId, options, loading: false, error: "" });
-      setSelection((current) => current.provinceId === provinceId &&
-        !options.some((row) => row.id === current.wardId)
-        ? { provinceId, wardId: null } : current);
+      setSelection((current) => {
+        if (current.provinceId !== provinceId) return current;
+        if (options.some((row) => row.id === current.wardId)) return current;
+        const defaultWardId = provinceId === DEFAULT_PROVINCE_ID &&
+          options.some((row) => row.id === DEFAULT_WARD_ID) ? DEFAULT_WARD_ID : null;
+        return { provinceId, wardId: defaultWardId };
+      });
     }).catch((error) => {
       if (!controller.signal.aborted) {
         setWardCatalog({
