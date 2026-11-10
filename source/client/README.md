@@ -19,5 +19,6 @@ npm run preview
 `preview` chỉ xem bản build; muốn gọi API dùng Vite dev server hoặc Docker/Nginx.
 `src/lib/api.ts`: kiểu dữ liệu và REST wrapper.
 `src/hooks/useWeather.ts`: WebSocket, reconnect/backoff, tải lại dữ liệu sau reconnect.
+`src/lib/realtime.ts`: chính sách backoff và ngưỡng heartbeat watchdog cho socket.
 `src/App.tsx`: dashboard; `src/styles.css`: responsive styling.
 Hướng dẫn đầy đủ và giới hạn tại [README chính](../../README.md).

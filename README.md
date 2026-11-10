@@ -243,6 +243,8 @@ Bản tin WebSocket:
 Ví dụ trên rút gọn danh sách cảnh báo; bản tin mẫu thực tế còn có cảnh báo mưa và gió.
 Hub giới hạn 32 event mỗi subscriber, bỏ event cũ nhất khi chậm. Stream là live best-effort;
 DB là nguồn lịch sử. React reconnect theo exponential backoff tối đa 15 giây rồi tải snapshot/history.
+Client còn giám sát heartbeat 15 giây của server: quá 45 giây không có bản tin thì tự đóng socket
+và reconnect, trạng thái hiển thị “Mất kết nối · đang thử lại” → “Đang đồng bộ dữ liệu” → “Đang trực tuyến”.
 
 ## Kiểm thử và demo
 

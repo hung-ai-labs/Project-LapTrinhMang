@@ -2,6 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   api, ApiError, type Forecast, type Observation, type PaginatedData, type WeatherEvent,
 } from "../lib/api";
+import {
+  backoffDelay, HEARTBEAT_CHECK_MS, heartbeatExpired,
+} from "../lib/realtime";
 
 function mergeHistory(records: Observation[], incoming: Observation[]) {
   const unique = new Map([...records, ...incoming].map((item) => [item.id, item]));
@@ -51,9 +54,11 @@ export function useWeather(
     let disposed = false;
     let socket: WebSocket | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let watchdog: ReturnType<typeof setInterval> | undefined;
     let attempts = 0;
     let connectedBefore = false;
     let refreshing = false;
+    let lastMessageAt = 0;
     const controller = new AbortController();
     const base = `/wards/${encodeURIComponent(wardId)}/weather`;
     const update = (change: (previous: CurrentState) => CurrentState) => {
@@ -87,6 +92,12 @@ export function useWeather(
         }));
       } finally { refreshing = false; }
     };
+    const resync = async () => {
+      await refreshCurrent();
+      if (disposed) return;
+      setRecovery((previous) => previous + 1);
+      update((previous) => ({ ...previous, status: "Đang trực tuyến" }));
+    };
     const connect = () => {
       if (disposed) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -94,15 +105,18 @@ export function useWeather(
       socket.onopen = () => {
         if (disposed) return;
         attempts = 0;
-        update((previous) => ({ ...previous, status: "Đang trực tuyến" }));
+        lastMessageAt = Date.now();
         if (connectedBefore) {
-          void refreshCurrent();
-          setRecovery((previous) => previous + 1);
+          update((previous) => ({ ...previous, status: "Đang đồng bộ dữ liệu" }));
+          void resync();
+          return;
         }
         connectedBefore = true;
+        update((previous) => ({ ...previous, status: "Đang trực tuyến" }));
       };
       socket.onmessage = (message) => {
         if (disposed) return;
+        lastMessageAt = Date.now();
         try {
           const next = JSON.parse(message.data);
           if (next.type === "weather.update" && next.observation?.ward_id === wardId) applyEvent(next);
@@ -113,17 +127,25 @@ export function useWeather(
       socket.onclose = () => {
         if (disposed) return;
         update((previous) => ({ ...previous, status: "Mất kết nối · đang thử lại" }));
-        reconnectTimer = setTimeout(connect, Math.min(1000 * 2 ** attempts++, 15000));
+        reconnectTimer = setTimeout(connect, backoffDelay(attempts++));
       };
       socket.onerror = () => socket?.close();
     };
     void refreshCurrent();
     connect();
+    watchdog = setInterval(() => {
+      if (disposed || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (heartbeatExpired(lastMessageAt, Date.now())) {
+        update((previous) => ({ ...previous, status: "Mất kết nối · đang thử lại" }));
+        socket.close();
+      }
+    }, HEARTBEAT_CHECK_MS);
     const timer = setInterval(() => { void refreshCurrent(); }, 60000);
     return () => {
       disposed = true;
       controller.abort();
       clearTimeout(reconnectTimer);
+      clearInterval(watchdog);
       clearInterval(timer);
       socket?.close();
     };
