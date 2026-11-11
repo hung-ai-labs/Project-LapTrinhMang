@@ -16,3 +16,4 @@ coverage/
 .collector/
 *.log
 *.tsbuildinfo
+source/load-tests/results/

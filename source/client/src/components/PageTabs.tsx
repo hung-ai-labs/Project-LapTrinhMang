@@ -2,7 +2,6 @@ import type { MouseEvent } from "react";
 
 export const pageTabs = [
   { href: "/", label: "Tổng quan" },
-  { href: "/history", label: "Lịch sử" },
   { href: "/alerts", label: "Cảnh báo" },
   { href: "/forecast", label: "Dự báo" },
 ];

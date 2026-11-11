@@ -53,10 +53,8 @@ function Dashboard({ onNavigate, locations, view }: {
     };
   }, []);
   const [logoutError, setLogoutError] = useState("");
-  const { event, history, historyError, historyLoading, forecast, forecastError,
-    forecastLoading, requestForecast, status, error } = useWeather(locations.effectiveWardId, {
-    historyEnabled: view === "/history" || locations.historyEnabled,
-  });
+  const { event, forecast, forecastError,
+    forecastLoading, requestForecast, status, error } = useWeather(locations.effectiveWardId);
   const period = useDayPeriod();
   const current = event?.observation;
   // Scenes illustrate observations because the API does not expose condition codes.
@@ -95,7 +93,7 @@ function Dashboard({ onNavigate, locations, view }: {
         <section className="heading">
           <div>
             <p className="eyebrow">QUAN SÁT · DỰ BÁO · CẢNH BÁO</p>
-            <h1>{view === "/history" ? "Lịch sử thời tiết." : view === "/alerts" ? "Cảnh báo thời tiết." : "Thời tiết trong tầm mắt."}</h1>
+            <h1>{view === "/alerts" ? "Cảnh báo thời tiết." : "Thời tiết trong tầm mắt."}</h1>
             <p>Dữ liệu liên tục, cập nhật qua từng bản tin.</p>
           </div>
           <div className="location-filters" aria-label="Chọn địa điểm theo dõi">
@@ -128,8 +126,8 @@ function Dashboard({ onNavigate, locations, view }: {
         {!locations.provinceLoading && !locations.error && !locations.provinces.length &&
           <p className="notice" role="status">Chưa có danh mục tỉnh/thành phố.</p>}
         {error && <p className="notice" role="status">{error}</p>}
-        <div className={`dashboard ${view === "/history" || view === "/alerts" ? "single-page" : ""}`}>
-          {view !== "/history" && view !== "/alerts" && <>
+        <div className={`dashboard ${view === "/alerts" ? "single-page" : ""}`}>
+          {view !== "/alerts" && <>
           <section className="glass current" aria-label="Thời tiết hiện tại">
             <div className="section-heading">
               <h2 className="city-name">{locations.effectiveWard?.name ?? "Chọn phường/xã"}</h2>
@@ -162,21 +160,11 @@ function Dashboard({ onNavigate, locations, view }: {
             </button>
           </section>
           </>}
-          {view !== "/history" && <section className="glass alerts" aria-live="polite">
+          <section className="glass alerts" aria-live="polite">
             <h2><span aria-hidden="true">⚠</span> Cảnh báo thời tiết</h2>
             {!event ? <p>Chưa có dữ liệu để đánh giá.</p> : !event.alerts.length ? <p>Chưa ghi nhận chỉ số vượt ngưỡng.</p> : event.alerts.map((alert) => <p className="alert" key={alert.code}>{alert.message}</p>)}
             <small>Ngưỡng demo · Không thay thế cảnh báo khí tượng chính thức</small>
-          </section>}
-          {view !== "/alerts" && (locations.historyEnabled || view === "/history") && <section className="glass history">
-            <div className="section-heading"><h2>Lịch sử quan sát</h2><span>{history.length} / 60 bản tin</span></div>
-            {historyError && <p role="alert">{historyError}</p>}
-            <div className="table-wrap" tabIndex={0} role="region" aria-label="Bảng lịch sử thời tiết">
-              <table><thead><tr><th scope="col">Thời gian</th><th scope="col">Nhiệt độ</th><th scope="col">Độ ẩm</th><th scope="col">Mưa</th></tr></thead><tbody>
-                {history.map((record) => <tr key={record.id}><td>{time(record.observed_at)}</td><td>{record.temperature} °C</td><td>{record.humidity}%</td><td>{record.rainfall} mm/h</td></tr>)}
-                {!history.length && <tr><td colSpan={4}>{historyLoading ? "Đang tải lịch sử…" : "Chưa có lịch sử cho địa điểm này."}</td></tr>}
-              </tbody></table>
-            </div>
-          </section>}
+          </section>
         </div>
         <footer><p>Nguồn: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · Mưa quy đổi theo kỳ tích lũy sang mm/h.</p><p>Weather Stream · Giờ Việt Nam (UTC+7)</p><p>Nền minh họa theo thời tiết và giờ Việt Nam · Không phải ảnh trực tiếp</p></footer>
       </main>

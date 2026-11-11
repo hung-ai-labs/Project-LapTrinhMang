@@ -1,24 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  api, ApiError, type Forecast, type Observation, type PaginatedData, type WeatherEvent,
+  api, ApiError, type Forecast, type WeatherEvent,
 } from "../lib/api";
 
-function mergeHistory(records: Observation[], incoming: Observation[]) {
-  const unique = new Map([...records, ...incoming].map((item) => [item.id, item]));
-  return [...unique.values()]
-    .sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at) || b.id.localeCompare(a.id))
-    .slice(0, 60);
-}
 interface CurrentState {
   wardId: string | null;
   event: WeatherEvent | null;
   status: string;
-  error: string;
-}
-interface HistoryState {
-  wardId: string | null;
-  records: Observation[];
-  loading: boolean;
   error: string;
 }
 interface ForecastState {
@@ -32,18 +20,10 @@ function emptyCurrent(wardId: string | null): CurrentState {
 }
 const errorMessage = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
 
-export function useWeather(
-  wardId: string | null,
-  { historyEnabled = false }: { historyEnabled?: boolean } = {},
-) {
+export function useWeather(wardId: string | null) {
   const [current, setCurrent] = useState<CurrentState>(() => emptyCurrent(wardId));
-  const [history, setHistory] = useState<HistoryState>({ wardId: null, records: [], loading: false, error: "" });
   const [forecast, setForecast] = useState<ForecastState>({ wardId: null, value: null, loading: false, error: "" });
-  const [recovery, setRecovery] = useState(0);
   const [forecastRequest, setForecastRequest] = useState(0);
-  const historyKey = historyEnabled ? wardId : null;
-  const historyTarget = useRef(historyKey);
-  useLayoutEffect(() => { historyTarget.current = historyKey; }, [historyKey]);
 
   useEffect(() => {
     setCurrent(emptyCurrent(wardId));
@@ -67,12 +47,7 @@ export function useWeather(
           Date.parse(previous.event.observation.observed_at) ? next : previous.event,
         error: "",
       }));
-      if (historyTarget.current === wardId) setHistory((previous) => ({
-        wardId,
-        records: mergeHistory(previous.wardId === wardId ? previous.records : [], [next.observation]),
-        loading: previous.wardId === wardId ? previous.loading : false,
-        error: "",
-      }));
+
     };
     const refreshCurrent = async () => {
       if (disposed || refreshing) return;
@@ -97,7 +72,6 @@ export function useWeather(
         update((previous) => ({ ...previous, status: "Đang trực tuyến" }));
         if (connectedBefore) {
           void refreshCurrent();
-          setRecovery((previous) => previous + 1);
         }
         connectedBefore = true;
       };
@@ -130,41 +104,6 @@ export function useWeather(
   }, [wardId]);
 
   useEffect(() => {
-    setHistory((previous) => previous.wardId === historyKey && historyKey
-      ? previous : { wardId: historyKey, records: [], loading: Boolean(historyKey), error: "" });
-    if (!historyKey) return;
-    let disposed = false;
-    let refreshing = false;
-    const controller = new AbortController();
-    const refreshHistory = async () => {
-      if (disposed || refreshing) return;
-      refreshing = true;
-      try {
-        const result = await api<PaginatedData<Observation>>(
-          `/wards/${encodeURIComponent(historyKey)}/weather/history?page_size=60`, controller.signal,
-        );
-        if (!disposed) setHistory((previous) => ({
-          wardId: historyKey,
-          records: mergeHistory(previous.wardId === historyKey ? previous.records : [],
-            result.results.filter((row) => row.ward_id === historyKey)),
-          loading: false, error: "",
-        }));
-      } catch (error) {
-        if (!disposed) setHistory((previous) => ({
-          ...previous, loading: false, error: errorMessage(error, "Không tải được lịch sử."),
-        }));
-      } finally { refreshing = false; }
-    };
-    void refreshHistory();
-    const timer = setInterval(() => { void refreshHistory(); }, 60000);
-    return () => {
-      disposed = true;
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [historyKey, recovery]);
-
-  useEffect(() => {
     setForecast({ wardId, value: null, loading: Boolean(wardId), error: "" });
     if (!wardId) return;
     let disposed = false;
@@ -182,13 +121,9 @@ export function useWeather(
   }, [wardId, forecastRequest]);
 
   const visibleCurrent = current.wardId === wardId ? current : emptyCurrent(wardId);
-  const visibleHistory = historyKey && history.wardId === historyKey ? history : null;
   const visibleForecast = forecast.wardId === wardId ? forecast : null;
   return {
     ...visibleCurrent,
-    history: visibleHistory?.records ?? [],
-    historyError: visibleHistory?.error ?? "",
-    historyLoading: historyEnabled && Boolean(wardId) && (!visibleHistory || visibleHistory.loading),
     forecast: visibleForecast?.value ?? null,
     forecastError: visibleForecast?.error ?? "",
     forecastLoading: Boolean(wardId) && (!visibleForecast || visibleForecast.loading),

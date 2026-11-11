@@ -66,7 +66,6 @@ export function useLocations() {
     selectedWardId: selectedWard?.id ?? null,
     effectiveWardId: effectiveWard?.id ?? null,
     effectiveWard,
-    historyEnabled: selectedWard !== null,
     province: provinces.find((row) => row.id === provinceId) ?? null,
     provinceLoading, wardLoading,
     error: provinceError || (wardCatalog.provinceId === provinceId ? wardCatalog.error : ""),
