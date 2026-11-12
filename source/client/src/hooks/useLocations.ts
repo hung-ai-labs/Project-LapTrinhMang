@@ -152,7 +152,6 @@ export function useLocations() {
     selectedWardId: selectedWard?.id ?? null,
     effectiveWardId: effectiveWard?.id ?? null,
     effectiveWard,
-    historyEnabled: selectedWard !== null,
     province: provinces.find((row) => row.id === provinceId) ?? null,
     provinceLoading, wardLoading, online,
     offline: offlineSources.provinces || offlineSources.wards,

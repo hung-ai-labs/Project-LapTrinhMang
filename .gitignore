@@ -17,3 +17,4 @@ coverage/
 *.log
 *.tsbuildinfo
 tmp/
+source/load-tests/results/

@@ -32,13 +32,13 @@ flowchart LR
     V --> D[(PostgreSQL local / Neon)]
     V --> H[WebSocket hub theo thành phố]
     H -->|WS / WSS| R[React dashboard]
-    R -->|HTTP REST: hiện tại / lịch sử / baseline| A[FastAPI API :8000]
+    R -->|HTTP REST: hiện tại / dự báo| A[FastAPI API :8000]
     A --> D
 ```
 
 Publisher gửi dữ liệu liên tục qua **TCP socket thuần**; server kiểm tra và lưu trước khi ACK,
 sau đó broadcast **WebSocket** tới các client đang theo dõi thành phố tương ứng.
-HTTP dùng để truy vấn hiện tại/lịch sử và khôi phục dữ liệu khi reconnect. WebSocket chạy trên TCP,
+HTTP dùng để truy vấn hiện tại và khôi phục dữ liệu khi reconnect. WebSocket chạy trên TCP,
 nhưng có handshake và framing riêng; trình duyệt không kết nối trực tiếp raw TCP.
 
 Base có dữ liệu **mô phỏng**, chưa kết nối API khí tượng thật. Dự báo hiện tại là
@@ -152,6 +152,9 @@ Compose vẫn khởi động DB local do dependency, nhưng khi đặt URL Neon 
 Có thể dùng URL pooled cho runtime; khi migration DDL gặp giới hạn pooler, dùng URL direct
 cùng database để chạy `alembic upgrade head`. Không commit `.env` và không đưa URL vào log/ảnh.
 
+Chức năng lịch sử quan sát đã được gỡ khỏi giao diện; API lịch sử vẫn được giữ. Backend vẫn lưu quan sát
+để lấy thời tiết hiện tại và chống trùng bản tin TCP; thay đổi này không xóa dữ liệu trong DB.
+
 ## Giao tiếp và hợp đồng dữ liệu
 
 ### Model và danh mục tỉnh/phường xã
@@ -188,8 +191,8 @@ cho thông tin cá nhân và địa chỉ mặc định; API địa chỉ riêng
 | Endpoint | Giao thức | Kết quả |
 |---|---|---|
 | `/api/v1/health` | HTTP GET | Kiểm tra DB, trả 503 khi không kết nối được |
+| `/api/v1/wards/{ward_id}/weather/history?page=1&page_size=60` | HTTP GET | Lịch sử quan sát phân trang, mới nhất trước |
 | `/api/v1/wards/{ward_id}/weather/current` | HTTP GET | Quan sát mới nhất + cảnh báo; 404 nếu chưa có |
-| `/api/v1/wards/{ward_id}/weather/history?page=1&page_size=60` | HTTP GET | Phân trang trong data, mới nhất trước |
 | `/api/v1/wards/{ward_id}/weather/forecast` | HTTP GET | Baseline 1 giờ; `is_ai: false` |
 | `/api/v1/wards/{ward_id}/weather/future` | HTTP GET | Open-Meteo 7 ngày theo giờ; 168 mốc; không lưu DB |
 | `/api/v1/ws/wards/{ward_id}/weather` | WebSocket | `weather.update` và `heartbeat` mỗi 15 giây khi rảnh |
@@ -243,7 +246,7 @@ Bản tin WebSocket:
 
 Ví dụ trên rút gọn danh sách cảnh báo; bản tin mẫu thực tế còn có cảnh báo mưa và gió.
 Hub giới hạn 32 event mỗi subscriber, bỏ event cũ nhất khi chậm. Stream là live best-effort;
-DB là nguồn lịch sử. React reconnect theo exponential backoff tối đa 15 giây rồi tải snapshot/history.
+DB là nguồn lịch sử. React reconnect theo exponential backoff tối đa 15 giây rồi tải snapshot hiện tại.
 Client còn giám sát heartbeat 15 giây của server: quá 45 giây không có bản tin thì tự đóng socket
 và reconnect, trạng thái hiển thị “Mất kết nối · đang thử lại” → “Đang đồng bộ dữ liệu” → “Đang trực tuyến”.
 
@@ -254,11 +257,11 @@ client lẫn server đều mất dữ liệu. Hệ thống xử lý theo hai l�
 
 **Client**
 
-- Danh mục tỉnh/xã, quan sát hiện tại, lịch sử và dự báo đều được ghi nhớ trong `localStorage`
+- Danh mục tỉnh/xã, quan sát hiện tại và dự báo đều được ghi nhớ trong `localStorage`
   và hiển thị ngay khi mở app, kể cả khi đang mất mạng.
 - Mọi nguồn dữ liệu tự thử lại theo backoff 1s → 10s và giữ nguyên bản gần nhất khi lỗi.
 - Khi trình duyệt báo `online` thì WebSocket nối lại ngay (không chờ hết backoff) và danh mục,
-  current, lịch sử, dự báo được tải lại đồng thời.
+  current, dự báo được tải lại đồng thời.
 - Trong lúc mất kết nối, giao diện chỉ hiện **một thông báo** và đánh dấu “dữ liệu cũ” / “dự báo cũ”; khi có mạng lại thì mọi thông báo biến mất.
 
 **Server**
@@ -279,7 +282,7 @@ pytest -q
 ```
 
 Tests dùng SQLite tạm, không ghi Neon: TCP chia/gộp frame, validation/oversize, UUID retry,
-lưu DB → broadcast WS, lọc thành phố, REST/history/forecast. PostgreSQL/migration kiểm tra thêm
+lưu DB → broadcast WS, lọc thành phố, REST current/history/forecast. PostgreSQL/migration kiểm tra thêm
 qua Compose; CI chạy cả backend, build frontend và smoke test stack.
 
 ```bash
@@ -293,14 +296,13 @@ Sau khi stack demo chạy, ở root:
 ```bash
 curl http://localhost:8000/api/v1/health
 curl http://localhost:8000/api/v1/weather/hanoi/current
-curl 'http://localhost:8000/api/v1/weather/hanoi/history?page=1&page_size=5'
 ```
 
 Demo nhiều tab: mở dashboard 3 tab, chọn 3 thành phố, theo dõi frame WebSocket ở DevTools.
 Dừng/chạy lại simulator để kiểm tra publisher retry; dừng/chạy lại server để kiểm tra React reconnect.
 Kết quả kiểm tra base ngày 20/10/2026: 6/6 bài pytest pass, Ruff pass, frontend build pass;
 Docker Compose chạy PostgreSQL và migration thành công. Smoke test đã xác minh TCP ACK/chống trùng,
-REST history/forecast và WebSocket qua Nginx. Chưa có benchmark tải hoặc kiểm định mô hình AI.
+REST current/history/forecast và WebSocket qua Nginx. Chưa có benchmark tải hoặc kiểm định mô hình AI.
 
 Ảnh chạy thật với **dữ liệu mô phỏng**:
 
@@ -338,8 +340,7 @@ Base chạy **một Uvicorn worker** vì TCP listener và WebSocket hub nằm tr
 chưa dùng Redis/message broker. Nếu mở rộng nhiều worker cần tách ingestion và pub/sub.
 Chưa có provider thật, mô hình AI, auth, alert history/cooldown, dữ liệu cũ/stale indicator,
 metric benchmark hay notification ngoài ứng dụng. Chưa đảm bảo broadcast bền vững nếu process chết
-ngay sau commit; client có thể phục hồi dữ liệu bằng REST history. Chỉ tải lại tối đa 60 quan sát
-khi reconnect ở UI hiện tại. Xem thứ tự triển khai và phân công trong tài liệu kế hoạch.
+ngay sau commit; client tải lại quan sát mới nhất bằng REST current khi reconnect. Xem thứ tự triển khai và phân công trong tài liệu kế hoạch.
 
 ## Tài liệu tham khảo
 
@@ -400,7 +401,7 @@ Frontend có attribution. Ngưỡng cảnh báo vẫn là demo; AI dự báo v�
 ## Dashboard theo phường/xã
 
 Chọn tỉnh/thành phố để tải danh sách phường/xã trong tỉnh đó, sau đó chọn phường/xã để xem
-thời tiết hiện tại, lịch sử và baseline dự báo. Bộ chọn dùng mã Province/Ward từ database,
+thời tiết hiện tại và dự báo. Bộ chọn dùng mã Province/Ward từ database,
 không dùng tên làm khóa; danh mục được đọc đủ các trang. Đổi tỉnh sẽ xóa Ward đang chọn và
 xóa số liệu địa điểm cũ; request/socket cũ được hủy để tránh lẫn dữ liệu.
 Tỉnh/thành dùng để lọc danh sách Ward, không có xã đại diện hoặc phép lấy trung bình toàn tỉnh.
@@ -443,10 +444,10 @@ API dự báo theo Ward: `GET /api/v1/wards/{ward_id}/weather/future` cố đị
 
 ### Điều hướng giao diện
 
-Thanh điều hướng dùng chung có Tổng quan (`/`), Lịch sử (`/history`), Cảnh báo (`/alerts`)
+Thanh điều hướng dùng chung có Tổng quan (`/`), Cảnh báo (`/alerts`)
 và Dự báo (`/forecast`). Chuyển trang giữ thành phố đang chọn trong phiên giao diện và hỗ trợ
 Back/Forward; link Dự báo không còn dùng query string để quyết định route.
-Trang Lịch sử hiện dùng 60 quan sát gần nhất; trang Cảnh báo hiển thị ngưỡng demo trên quan sát
+Trang Cảnh báo hiển thị ngưỡng demo trên quan sát
 mới nhất, chưa có lịch sử các đợt cảnh báo. Vite/Nginx hỗ trợ tải trực tiếp các đường dẫn này.
 
 ## Chạy bằng PyCharm

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  api, ApiError, isConnectionError, type Forecast, type Observation, type PaginatedData,
+  api, ApiError, isConnectionError, type Forecast, 
   type WeatherEvent,
 } from "../lib/api";
 import { forecastCacheKey, ResourceLoader } from "../lib/catalog";
@@ -9,22 +9,10 @@ import {
 } from "../lib/realtime";
 import { useConnection } from "./useConnection";
 
-function mergeHistory(records: Observation[], incoming: Observation[]) {
-  const unique = new Map([...records, ...incoming].map((item) => [item.id, item]));
-  return [...unique.values()]
-    .sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at) || b.id.localeCompare(a.id))
-    .slice(0, 60);
-}
 interface CurrentState {
   wardId: string | null;
   event: WeatherEvent | null;
   status: string;
-  error: string;
-}
-interface HistoryState {
-  wardId: string | null;
-  records: Observation[];
-  loading: boolean;
   error: string;
 }
 interface ForecastState {
@@ -46,32 +34,24 @@ const forecastCache = {
   serialize: (value: Forecast) => JSON.stringify(value),
 };
 
-export function useWeather(
-  wardId: string | null,
-  { historyEnabled = false }: { historyEnabled?: boolean } = {},
-) {
+export function useWeather(wardId: string | null) {
   const { online, restored } = useConnection();
   const [current, setCurrent] = useState<CurrentState>(() => emptyCurrent(wardId));
-  const [history, setHistory] = useState<HistoryState>({ wardId: null, records: [], loading: false, error: "" });
   const [forecast, setForecast] = useState<ForecastState>({
     wardId: null, value: null, loading: false, error: "", fromCache: false,
   });
   const [offlineSources, setOfflineSources] = useState({
-    current: false, history: false, forecast: false,
+    current: false, forecast: false,
   });
-  const markOffline = (source: "current" | "history" | "forecast", offline: boolean) => {
+  const markOffline = (source: "current" | "forecast", offline: boolean) => {
     setOfflineSources((previous) => (
       previous[source] === offline ? previous : { ...previous, [source]: offline }
     ));
   };
   const currentLoader = useRef<ResourceLoader<WeatherEvent> | null>(null);
-  const historyLoader = useRef<ResourceLoader<PaginatedData<Observation>> | null>(null);
   const forecastLoader = useRef<ResourceLoader<Forecast> | null>(null);
   const reconnect = useRef<() => void>(() => {});
   const applyEventRef = useRef<(next: WeatherEvent) => void>(() => {});
-  const historyKey = historyEnabled ? wardId : null;
-  const historyKeyRef = useRef(historyKey);
-  useEffect(() => { historyKeyRef.current = historyKey; }, [historyKey]);
 
   useEffect(() => {
     if (!wardId) {
@@ -91,13 +71,6 @@ export function useWeather(
           error: "",
         };
       });
-      const key = historyKeyRef.current;
-      if (key) setHistory((previous) => ({
-        wardId: key,
-        records: mergeHistory(previous.wardId === key ? previous.records : [], [next.observation]),
-        loading: previous.wardId === key ? previous.loading : false,
-        error: "",
-      }));
     };
     applyEventRef.current = applyEvent;
     const loader = new ResourceLoader<WeatherEvent>({
@@ -128,47 +101,6 @@ export function useWeather(
     };
   }, [wardId]);
 
-  useEffect(() => {
-    if (!historyKey) {
-      historyLoader.current = null;
-      markOffline("history", false);
-      setHistory({ wardId: null, records: [], loading: false, error: "" });
-      return;
-    }
-    const loader = new ResourceLoader<PaginatedData<Observation>>({
-      load: (signal) => api<PaginatedData<Observation>>(
-        `/wards/${encodeURIComponent(historyKey)}/weather/history?page_size=60`, signal,
-      ),
-      onValue: (result) => setHistory((previous) => ({
-        wardId: historyKey,
-        records: mergeHistory(previous.wardId === historyKey ? previous.records : [],
-          result.results.filter((row) => row.ward_id === historyKey)),
-        loading: false,
-        error: "",
-      })),
-      onError: (message, error) => {
-        if (isConnectionError(error)) {
-          markOffline("history", true);
-          return;
-        }
-        markOffline("history", false);
-        setHistory((previous) => (
-          previous.wardId === historyKey ? { ...previous, loading: false, error: message } : previous
-        ));
-      },
-      onLoading: (loading) => setHistory((previous) => (
-        previous.wardId === historyKey ? { ...previous, loading } : previous
-      )),
-      retryDelay: nextRetryDelay,
-      pollIntervalMs: 60000,
-    });
-    historyLoader.current = loader;
-    loader.start();
-    return () => {
-      loader.stop();
-      historyLoader.current = null;
-    };
-  }, [historyKey]);
 
   useEffect(() => {
     if (!wardId) {
@@ -225,7 +157,6 @@ export function useWeather(
     };
     const resync = () => {
       currentLoader.current?.refresh();
-      historyLoader.current?.refresh();
       update((previous) => ({ ...previous, status: "Đang trực tuyến" }));
     };
     const connect = () => {
@@ -308,20 +239,15 @@ export function useWeather(
     if (restored === 0) return;
     reconnect.current();
     currentLoader.current?.refresh();
-    historyLoader.current?.refresh();
     forecastLoader.current?.refresh();
   }, [restored]);
 
   const visibleCurrent = current.wardId === wardId ? current : emptyCurrent(wardId);
-  const visibleHistory = historyKey && history.wardId === historyKey ? history : null;
   const visibleForecast = forecast.wardId === wardId ? forecast : null;
   return {
     ...visibleCurrent,
     stale: Boolean(visibleCurrent.event) && visibleCurrent.status !== "Đang trực tuyến",
-    offline: offlineSources.current || offlineSources.history || offlineSources.forecast,
-    history: visibleHistory?.records ?? [],
-    historyError: visibleHistory?.error ?? "",
-    historyLoading: historyEnabled && Boolean(wardId) && (!visibleHistory || visibleHistory.loading),
+    offline: offlineSources.current || offlineSources.forecast,
     forecast: visibleForecast?.value ?? null,
     forecastError: visibleForecast?.error ?? "",
     forecastStale: Boolean(visibleForecast?.value) && visibleForecast?.fromCache === true,

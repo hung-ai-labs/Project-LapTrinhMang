@@ -58,16 +58,16 @@ Không cần Authorization, không cần đăng nhập và không cần cấu h�
 | Method | Endpoint | Nội dung/tham số |
 |---|---|---|
 | GET | `/health` | Kiểm tra DB; lỗi DB trả 503 |
-| GET | `/weather/{city}/current` | Observation mới nhất và cảnh báo |
-| GET | `/weather/{city}/history` | History phân trang; page/page_size |
-| GET | `/weather/{city}/forecast` | Persistence baseline, is_ai=false |
+| GET | `/wards/{ward_id}/weather/history` | Lịch sử phân trang; page/page_size |
+| GET | `/wards/{ward_id}/weather/current` | Observation mới nhất và cảnh báo |
+| GET | `/wards/{ward_id}/weather/forecast` | Dự báo giờ kế tiếp từ Open-Meteo |
 | GET | `/provinces` | Tỉnh/thành active; q/page/page_size |
 | GET | `/provinces/{province_id}` | Chi tiết tỉnh/thành active |
 | GET | `/wards` | Phường/xã và tỉnh active; province_id/q/page/page_size |
 | GET | `/wards/{ward_id}` | Chi tiết phường/xã active |
 | POST | `/geography/nearest-ward` | Tọa độ → ward gần nhất |
 
-City hiện là hanoi/danang/hcm. Chưa có thời tiết cho nguồn đã chọn trả 404, không yêu cầu đăng nhập. Danh mục cần import trước; mã giữ dạng chuỗi như `01`, `00004`.
+Thời tiết hiện tại và dự báo theo mã phường/xã. API lịch sử quan sát vẫn hoạt động; giao diện không hiển thị lịch sử. Chưa có thời tiết cho nguồn đã chọn trả 404, không yêu cầu đăng nhập. Danh mục cần import trước; mã giữ dạng chuỗi như `01`, `00004`.
 
 ```bash
 curl 'http://localhost:8000/api/v1/provinces?page=1&page_size=25'

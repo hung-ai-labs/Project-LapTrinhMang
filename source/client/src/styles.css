@@ -124,7 +124,6 @@ h2 { font-size: .875rem; font-weight: 500; margin: 0; }
 .forecast-symbol { color: #f4e7c2; font-size: 2.625rem; }
 .forecast p { font-size: .8125rem; margin: 8px 0 16px; }
 .forecast small { margin-top: auto; }
-.history { grid-column: 1 / -1; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .glass .city-name { color: #fff; font-size: 1.5rem; }
 .section-heading > span { color: var(--muted); font-size: .6875rem; }
