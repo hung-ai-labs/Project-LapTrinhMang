@@ -274,6 +274,12 @@ client lẫn server đều mất dữ liệu. Hệ thống xử lý theo hai l�
 
 ## Kiểm thử và demo
 
+Bài đo tải Apache JMeter với 100 người dùng, mỗi người giữ WebSocket và đọc REST qua Nginx:
+xem [hướng dẫn chạy và tiêu chí đánh giá](source/load-tests/README.md).
+Môi trường đo dùng PostgreSQL riêng và dữ liệu mô phỏng, không ghi vào Neon.
+Lượt đo mới nhất ngày 10/11/2026 lúc 22:34: 48.000 request HTTP, 0 lỗi, p95 từng API 142–148 ms;
+100 WebSocket cùng kết nối trong 129,23 giây. Xem [báo cáo hai lượt đo và giới hạn](docs/07_KIEM_THU_TAI_JMETER.md).
+
 ```bash
 cd source/server
 source .venv/bin/activate

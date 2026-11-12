@@ -1,0 +1,12 @@
+{
+  "started_at_utc": "2026-11-10T15:34:14.7118441Z",
+  "ramp_seconds": 30,
+  "target": "http://127.0.0.1:18080",
+  "users": 100,
+  "loops": 120,
+  "ward": "00004",
+  "province": "01",
+  "think_ms": 1000,
+  "jmeter_home": "C:\\Users\\Thang\\AppData\\Local\\Temp/weather-load-tools/apache-jmeter-5.6.3",
+  "java_home": "C:/Program Files/Java/jdk-17"
+}

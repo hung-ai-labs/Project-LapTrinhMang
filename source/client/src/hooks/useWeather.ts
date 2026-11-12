@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  api, ApiError, isConnectionError, type Forecast, 
+  api, ApiError, isConnectionError, type Forecast,
   type WeatherEvent,
 } from "../lib/api";
 import { forecastCacheKey, ResourceLoader } from "../lib/catalog";
