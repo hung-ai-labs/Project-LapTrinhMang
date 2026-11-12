@@ -9,7 +9,7 @@ Chưa có MSSV, họ tên đầy đủ hoặc GitHub username nên để bổ su
 
 ## Base hiện có
 
-- [x] FastAPI REST API, health check có truy vấn database.
+- [x] Spring Boot REST API, health check có truy vấn database.
 - [x] PostgreSQL + SQLAlchemy async + Alembic; cấu hình thay URL sang Neon.
 - [x] TCP NDJSON, validation, ACK, UUID chống trùng khi retry, giới hạn frame và timeout.
 - [x] Publisher dữ liệu mô phỏng, retry khi mất kết nối.

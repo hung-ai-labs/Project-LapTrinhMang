@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-12",
+  "baseline": "f63561a",
+  "database": "isolated local PostgreSQL 14.21; simulator",
+  "kind": "short smoke, not a sustained JMeter benchmark",
+  "metrics": {
+    "users": 100,
+    "http_samples": 2000,
+    "errors": 0,
+    "ws_receiving_updates": 100,
+    "http_p95_ms": 286,
+    "duration_seconds": 3.28
+  }
+}

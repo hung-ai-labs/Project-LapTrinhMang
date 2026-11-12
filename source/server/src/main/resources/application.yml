@@ -1,0 +1,47 @@
+server:
+  port: ${API_PORT:8000}
+spring:
+  task:
+    scheduling:
+      pool:
+        size: 4
+  application:
+    name: weather-stream
+  config:
+    import: optional:file:.env[.properties]
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: true
+    serialization:
+      write-dates-as-timestamps: false
+  jpa:
+    open-in-view: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jakarta.persistence.query.timeout: 10000
+        boot:
+          allow_jdbc_metadata_access: false
+        jdbc:
+          time_zone: UTC
+  sql:
+    init:
+      mode: never
+springdoc:
+  swagger-ui:
+    path: /docs
+weather:
+  database-url: ${DATABASE_URL:postgresql://weather:weather@localhost:5433/weather}
+  database-user: ${DB_USER:}
+  database-password: ${DB_PASSWORD:}
+  jwt-secret: ${JWT_SECRET:}
+  jwt-expire-minutes: ${JWT_EXPIRE_MINUTES:30}
+  cors-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:8080,http://127.0.0.1:8080}
+  source: ${WEATHER_SOURCE:provider}
+  tcp-host: ${TCP_HOST:127.0.0.1}
+  tcp-port: ${TCP_PORT:9000}
+  enable-tcp: ${ENABLE_TCP:true}
+  open-meteo-url: https://api.open-meteo.com/v1/forecast

@@ -1,0 +1,36 @@
+PASS: public /api/v1/health
+PASS: public /api/v1/provinces?page_size=1
+PASS: public /api/v1/wards?province_id=01&page_size=2
+PASS: public /api/v1/wards/00004
+PASS: public /api/v1/geography/nearest-ward
+PASS: error /api/v1/provinces?page=0
+PASS: error /api/v1/wards?page_size=101
+PASS: error /api/v1/missing
+PASS: error /api/v1/auth/me
+PASS: FastAPI registers legacy account
+PASS: Spring accepts FastAPI JWT
+PASS: Spring verifies existing Argon2 hash
+PASS: Spring registers account on Alembic schema
+PASS: FastAPI accepts Spring JWT
+PASS: FastAPI verifies Java Argon2 hash
+PASS: Spring saves address
+PASS: address persists identically across runtimes
+PASS: user B cannot see A address
+PASS: delete address persists
+PASS: simulator accepted by FastAPI TCP
+PASS: simulator duplicate accepted across runtimes
+PASS: simulator conflict detected across runtimes
+PASS: simulator accepted by Java TCP
+PASS: simulator Java write readable as duplicate by FastAPI
+PASS: provider accepted by FastAPI TCP
+PASS: provider duplicate accepted across runtimes
+PASS: provider conflict detected across runtimes
+PASS: provider accepted by Java TCP
+PASS: provider Java write readable as duplicate by FastAPI
+PASS: observation parity /api/v1/wards/00004/weather/current
+PASS: observation parity /api/v1/wards/00004/weather/history?page_size=1
+PASS: Java logout succeeds
+PASS: Java logout revokes legacy JWT on both servers
+PASS: FastAPI logout succeeds
+PASS: FastAPI logout revokes Java JWT on both servers
+{"checks": 35, "result": "PASS", "database": "isolated PostgreSQL; no Neon writes"}

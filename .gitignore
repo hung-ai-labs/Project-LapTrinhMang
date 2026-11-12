@@ -18,3 +18,7 @@ coverage/
 *.tsbuildinfo
 tmp/
 source/load-tests/results/
+
+# Java / Maven
+**/target/
+*.class

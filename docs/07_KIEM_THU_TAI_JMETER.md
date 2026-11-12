@@ -1,3 +1,5 @@
+> Ghi chú chuyển đổi: báo cáo/minh chứng dưới đây đo backend Python. Backend hiện dùng Spring Boot, cần chạy lại theo `source/load-tests/README.md` để đánh giá Java.
+
 # Báo cáo kiểm thử tải Apache JMeter — 10/11/2026
 
 ## Cập nhật: lượt chạy lại lúc 22:34

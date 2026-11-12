@@ -17,9 +17,11 @@ services:
       timeout: 3s
       retries: 20
   server:
-    build: ./source/server
+    build:
+      context: ./source
+      dockerfile: server/Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weather:weather@db:5432/weather}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://weather:weather@db:5432/weather}
       CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:5173","http://localhost:8080"]}'
       TCP_HOST: 0.0.0.0
       TCP_PORT: 9000
@@ -34,7 +36,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -45,17 +47,38 @@ services:
     depends_on:
       server:
         condition: service_healthy
+  db-init:
+    build:
+      context: ./source
+      dockerfile: server/Dockerfile
+    profiles: [setup]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://weather:weather@db:5432/weather}
+      SPRING_PROFILES_ACTIVE: init-db
+      SPRING_MAIN_WEB_APPLICATION_TYPE: none
+      ENABLE_TCP: "false"
+    depends_on:
+      db:
+        condition: service_healthy
   collector:
-    build: ./source/server
+    build:
+      context: ./source
+      dockerfile: server/Dockerfile
     profiles: [live]
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weather:weather@db:5432/weather}
-      PYTHONPATH: /app
+      DATABASE_URL: ${DATABASE_URL:-postgresql://weather:weather@db:5432/weather}
+      SPRING_PROFILES_ACTIVE: collector
+      SPRING_MAIN_WEB_APPLICATION_TYPE: none
+      ENABLE_TCP: "false"
+      TCP_PORT: 9000
+      COLLECTOR_HOST: server
+      COLLECTOR_WARD_IDS: ${COLLECTOR_WARD_IDS-00004}
+      COLLECTOR_ALL_WARDS: ${COLLECTOR_ALL_WARDS:-false}
+      COLLECTOR_MAX_PENDING: ${COLLECTOR_MAX_PENDING:-10000}
+      COLLECTOR_OUTBOX: /home/weather/.collector/outbox
     volumes:
-      - ./source/scripts:/scripts:ro
       - collector_state:/home/weather/.collector
-    command: ["python", "/scripts/collect_open_meteo.py", "--host", "server", "--outbox", "/home/weather/.collector/outbox.sqlite3"]
     depends_on:
       server:
         condition: service_healthy

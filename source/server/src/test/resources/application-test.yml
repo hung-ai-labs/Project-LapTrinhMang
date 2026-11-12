@@ -1,0 +1,13 @@
+weather:
+  database-url: jdbc:h2:mem:weather;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+  database-user: sa
+  database-password: ""
+  jwt-secret: integration-test-secret-at-least-32-characters
+  tcp-port: 0
+  enable-tcp: true
+  source: simulator
+spring:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop

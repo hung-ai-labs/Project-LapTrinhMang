@@ -14,28 +14,38 @@ services:
     volumes:
       - loadtest_data:/var/lib/postgresql/data
   server:
-    build: ../server
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://weather:loadtest-local-only@db:5432/weather
+      DATABASE_URL: postgresql://weather:loadtest-local-only@db:5432/weather
       WEATHER_SOURCE: simulator
       JWT_SECRET: local-loadtest-only-secret-at-least-32-characters
       TCP_HOST: 0.0.0.0
-      PYTHONPATH: /app
     ports:
       - "127.0.0.1:18000:8000"
       - "127.0.0.1:19000:9000"
-    volumes:
-      - ../scripts:/source/scripts:ro
-      - ../data:/source/data:ro
-      - .:/load-tests:ro
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      test: [CMD, curl, -fsS, "http://localhost:8000/api/v1/health"]
       interval: 3s
       timeout: 5s
       retries: 60
+  db-init:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    profiles: [setup]
+    environment:
+      DATABASE_URL: postgresql://weather:loadtest-local-only@db:5432/weather
+      SPRING_PROFILES_ACTIVE: init-db
+      SPRING_MAIN_WEB_APPLICATION_TYPE: none
+      ENABLE_TCP: "false"
+    depends_on:
+      db:
+        condition: service_healthy
   client:
     build: ../client
     ports:

@@ -1,5 +1,7 @@
 # Kiểm thử tải Apache JMeter — 100 người dùng
 
+> Backend hiện là Spring Boot. Các minh chứng trong `evidence/` thuộc bản Python cũ; chưa chứng minh tải bản Java.
+
 Mục tiêu: đo baseline trước khi tối ưu. Mỗi người dùng mở **một WebSocket giữ suốt phiên**,
 đọc 4 API theo thứ tự provinces → wards → current → history, nghỉ 1 giây rồi lặp lại.
 100 người dùng thực hiện request tuần tự trong từng phiên, không đồng nghĩa 100 request
@@ -24,14 +26,14 @@ giả lập có kiểm soát hoặc một bài riêng phù hợp quota; kết qu
 - Mật khẩu/secret trong Compose này chỉ là giá trị công khai cho môi trường local kiểm thử.
 
 ```powershell
-docker compose -f source/load-tests/compose.yaml up --build -d --wait
-docker compose -f source/load-tests/compose.yaml exec -T server python /load-tests/prepare.py
+docker compose -f source/load-tests/compose.yaml up -d db
+docker compose -f source/load-tests/compose.yaml --profile setup run --build --rm db-init
+docker compose -f source/load-tests/compose.yaml up --build -d --wait server client
 python -X utf8 source/scripts/publish_weather.py --port 19000 --ward-id 00004 --count 60 --interval 0.01
 docker compose -f source/load-tests/compose.yaml --profile stream up -d simulator
 ```
 
-`prepare.py` nhập đủ 34 tỉnh và 3.321 Ward, kiểm tra manifest SHA-256 trên bản tạm chuẩn LF
-để hỗ trợ Git checkout CRLF trên Windows. Không sửa snapshot gốc. Dữ liệu thời tiết hoàn toàn mô phỏng.
+Profile Java `init-db` nhập 34 tỉnh và 3.321 Ward từ snapshot trong jar. Dữ liệu thời tiết hoàn toàn mô phỏng.
 Lần đầu có tối thiểu 60 quan sát; chạy lại tiếp tục tích lũy, cần ghi số dòng khi so sánh benchmark.
 
 ## Chạy đo
