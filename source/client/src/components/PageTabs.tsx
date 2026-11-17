@@ -4,6 +4,7 @@ export const pageTabs = [
   { href: "/", label: "Tổng quan" },
   { href: "/alerts", label: "Cảnh báo" },
   { href: "/forecast", label: "Dự báo" },
+  { href: "/chat", label: "Trợ lý" },
 ];
 
 export default function PageTabs({ onNavigate }: { onNavigate: (path: string) => void }) {

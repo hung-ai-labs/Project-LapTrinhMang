@@ -23,10 +23,25 @@ mvn spring-boot:run -Dspring-boot.run.profiles=init-db -Dspring-boot.run.argumen
 
 Profile này tạo bảng nếu chưa tồn tại, chèn địa danh chưa có và thoát. Không tự chạy khi start server. Nếu dùng Neon đã có dữ liệu thì không cần bước này.
 
+- Giao diện React: http://localhost:8000/
 - REST: http://localhost:8000/api/v1/health
 - Swagger: http://localhost:8000/docs
 - TCP NDJSON: `127.0.0.1:9000`
 - WebSocket: `ws://localhost:8000/api/v1/ws/wards/00004/weather`
+
+### Một cổng phục vụ cả giao diện lẫn API
+
+`spring.web.resources.static-locations` trỏ lần lượt `file:../client/dist/` rồi `classpath:/static/`:
+khi chạy từ `source/server` thì bản `npm run build` mới nhất được dùng ngay; khi chạy jar đóng gói
+thì không có thư mục đó nên rơi về bản đã nhúng trong jar (`pom.xml` copy `../client/dist` vào
+`static`). Maven **bỏ qua im lặng** nếu chưa build client, nên `mvn package` vẫn chạy được.
+
+`SpaController` forward `/login` và `/register` về `index.html` cho routing phía client. Danh sách
+route được liệt kê **tường minh** chứ không dùng catch-all: catch-all sẽ nuốt luôn `/api/**`,
+`/docs` và WebSocket, biến 404 thật thành một trang HTML. Thêm route mới ở client thì thêm một dòng
+ở đây. Đường dẫn lạ vẫn trả đúng envelope JSON 404.
+
+Nhớ `npm run build` lại sau khi sửa giao diện, nếu không jar/server sẽ phục vụ bản cũ.
 
 ## Luồng code để đọc và thuyết trình
 
@@ -92,6 +107,58 @@ TCP là byte stream: đọc đến newline, giới hạn frame 8 KiB, idle timeo
 - Kiểm tra đơn vị, mảng và phạm vi giá trị từ provider. Không gắn nhãn AI cho dự báo Open-Meteo. Cảnh báo heat/rain/wind là luật ngưỡng demo.
 
 Catalog có cache 10 phút và trả header `X-Data-Stale: true` khi phải dùng cache cũ do DB lỗi.
+
+### Chatbot Gemini: SSE, function calling và RAG
+
+`ChatController → ChatService → GeminiClient` cộng với `List<ChatTool>` được Spring tiêm vào.
+Toàn bộ `/api/v1/chat/**` yêu cầu JWT; API key chỉ nằm ở server, không bao giờ ra frontend.
+
+```mermaid
+sequenceDiagram
+  participant R as React
+  participant C as ChatController (SSE)
+  participant S as ChatService
+  participant G as Gemini
+  participant T as ChatTool
+  R->>C: POST /api/v1/chat/ask
+  C->>S: ask(user, request, sink)
+  S->>G: contents = lịch sử + câu mới + functionDeclarations
+  G-->>S: functionCall (+ thoughtSignature)
+  S->>T: execute(args)
+  T-->>S: kết quả + citations
+  S->>G: functionResponse (replay cả thoughtSignature)
+  G-->>S: token stream
+  S-->>C: delta / tool / citations
+  C-->>R: event: delta | tool | citations | done | error
+```
+
+Chọn **SSE** chứ không WebSocket: luồng một chiều, đi trên HTTP thường, trình duyệt tự kết nối
+lại. Cùng dự án nay có bốn tầng để đối chiếu: TCP thô, WebSocket, REST và SSE.
+
+- **Hai pha bắt buộc.** Gemini trả `functionCall` trước, server chạy tool rồi gửi `functionResponse`,
+  sau đó mới có câu trả lời. Tối đa 3 vòng tool cho mỗi câu hỏi.
+- **`thoughtSignature`.** Model Gemini 3.x gắn chữ ký vào part `functionCall`; nếu không replay lại
+  nguyên vẹn, lượt kế tiếp bị từ chối với lỗi 400.
+- **Số liệu không được bịa.** 5 tool thời tiết (`find_ward`, `get_current_weather`, `get_forecast`,
+  `get_history`, `get_alerts`) gọi thẳng service sẵn có. Tool lỗi trả `{"error": ...}` để model tự
+  xoay xở thay vì làm hỏng cả lượt.
+- **RAG** qua `search_documents`: pgvector trong Neon, `gemini-embedding-001` 768 chiều đã chuẩn hóa
+  L2, cosine `1 - (embedding <=> query)`. Dưới ngưỡng `RAG_MIN_SCORE` thì trả "không có trong tài
+  liệu" thay vì đoán. Mỗi câu trả lời kèm trích dẫn `source_path` + `heading`.
+- **Chịu lỗi mạng.** Backoff cho 429/503, chuyển sang model dự phòng khi 404/503, và một ngân sách
+  thời gian chung nhỏ hơn timeout của SSE để client luôn nhận được event `error`.
+- **Rate limit** theo user mỗi phút (`CHAT_RATE_LIMIT_PER_MINUTE`) để giữ hạn mức Gemini.
+
+Bảng `chat_conversations` / `chat_messages` lưu nhiều đoạn chat tách biệt cho mỗi user; mỗi câu hỏi
+mới nạp lại `CHAT_HISTORY_TURNS` lượt gần nhất làm ngữ cảnh.
+
+Build chỉ mục tài liệu (chỉ chạy khi cần, không chạy lúc serve):
+
+```sh
+mvn spring-boot:run -Dspring-boot.run.profiles=index-docs -Dspring-boot.run.arguments="--spring.main.web-application-type=none --weather.enable-tcp=false"
+```
+
+Chạy lại rất rẻ: chỉ đoạn nào đổi nội dung mới phải embed lại (so khớp theo `content_hash`).
 
 ## Collector Java có outbox
 

@@ -1,0 +1,88 @@
+/* Chat uses the same glass tokens as the dashboard so it does not read as a bolted-on page. */
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+}
+
+.chat-threads { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; }
+.chat-threads ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.chat-threads li { display: flex; align-items: center; gap: 4px; }
+
+.chat-threads li > button:first-child {
+  flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border-radius: 12px; border: 1px solid transparent;
+  background: transparent; color: inherit; cursor: pointer; font: inherit;
+}
+.chat-threads li > button:first-child span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem;
+}
+.chat-threads li > button:first-child small { color: var(--muted); font-size: .6875rem; }
+.chat-threads li > button:first-child:hover { background: var(--option-hover); }
+.chat-threads li > button:first-child.active {
+  background: var(--option-selected); border-color: var(--control-border);
+}
+
+.chat-new {
+  padding: 10px; border-radius: 12px; border: 1px solid var(--control-border);
+  background: var(--control-bg); color: inherit; cursor: pointer; font: inherit; font-size: .8125rem;
+}
+.chat-new:hover:enabled { background: var(--control-hover); }
+.chat-delete {
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 1.125rem; line-height: 1; padding: 4px 8px; border-radius: 8px;
+}
+.chat-delete:hover:enabled { background: var(--option-hover); color: #fff; }
+.chat-empty { color: var(--muted); font-size: .8125rem; }
+
+.chat-main { display: flex; flex-direction: column; gap: 12px; min-height: 60vh; }
+.chat-log { flex: 1; overflow-y: auto; max-height: 56vh; display: flex; flex-direction: column; gap: 12px; }
+
+.chat-intro { color: var(--muted); }
+.chat-intro h2 { color: #fff; font-size: 1rem; margin-bottom: 8px; }
+.chat-intro ul { margin: 10px 0 0; padding-left: 18px; font-size: .8125rem; }
+.chat-intro li { margin: 4px 0; }
+
+.chat-bubble { padding: 12px 14px; border-radius: 14px; max-width: 82%; }
+.chat-bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: .9375rem; }
+.chat-bubble.user { align-self: flex-end; background: var(--option-selected); border: 1px solid var(--control-border); }
+.chat-bubble.model { align-self: flex-start; background: #ffffff14; border: 1px solid var(--border); }
+
+.chat-sources {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 6px; font-size: .6875rem; color: var(--muted);
+}
+.chat-sources span { background: #ffffff14; padding: 2px 6px; border-radius: 6px; }
+
+/* Blinking caret marks text that is still arriving over SSE. */
+.chat-caret {
+  display: inline-block; width: 7px; height: 1em; margin-left: 2px;
+  background: var(--control-highlight); vertical-align: text-bottom; animation: chat-blink 1s steps(2) infinite;
+}
+@keyframes chat-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .chat-caret { animation: none; } }
+
+.chat-tool { color: var(--muted); font-size: .8125rem; margin: 0; font-style: italic; }
+.chat-error { color: #ffd2d2; font-size: .8125rem; margin: 0; }
+
+.chat-input { display: flex; gap: 10px; align-items: flex-end; }
+.chat-input textarea {
+  flex: 1; resize: vertical; min-height: 44px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--control-border); background: var(--control-bg); color: inherit;
+  font: inherit; font-size: .9375rem;
+}
+.chat-input textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.chat-input button {
+  padding: 12px 18px; border-radius: 12px; border: 1px solid var(--control-border);
+  background: var(--control-bg); color: inherit; cursor: pointer; font: inherit; font-size: .875rem;
+}
+.chat-input button:hover:enabled { background: var(--control-hover); }
+.chat-input button:disabled, .chat-new:disabled, .chat-delete:disabled { opacity: .5; cursor: default; }
+.chat-note { color: var(--muted); font-size: .6875rem; }
+
+@media (max-width: 760px) {
+  .chat-layout { grid-template-columns: 1fr; }
+  .chat-threads { max-height: 220px; }
+  .chat-bubble { max-width: 100%; }
+}

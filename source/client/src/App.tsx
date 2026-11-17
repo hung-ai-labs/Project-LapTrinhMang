@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { auth, getAuthSession, restoreAuthSession } from "./lib/auth";
 import PageTabs from "./components/PageTabs";
 import ProviderForecastPage from "./components/ProviderForecastPage";
-import type { City } from "./lib/api";
+import ChatPage from "./components/ChatPage";
+import { api, type City } from "./lib/api";
 import AuthPage from "./components/AuthPage";
 import { useDayPeriod } from "./hooks/useDayPeriod";
 import { useWeather } from "./hooks/useWeather";
@@ -33,6 +34,29 @@ export default function App() {
   return <Dashboard onNavigate={navigate} locations={locations} view={path} />;
 }
 
+type AdviceData = { available: boolean; advice: string | null; reason: string | null };
+
+/**
+ * Asks the server for clothing advice, but only while the alerts page is on screen: the answer
+ * costs a Gemini call, and the server caches it per ward for everyone else.
+ */
+function useAdvice(wardId: string | null | undefined, active: boolean) {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!active || !wardId) { setText(""); setLoading(false); return; }
+    const controller = new AbortController();
+    setLoading(true);
+    setText("");
+    api<AdviceData>(`/wards/${encodeURIComponent(wardId)}/weather/advice`, controller.signal, "no-store")
+      .then(data => { if (data.available && data.advice) setText(data.advice); })
+      .catch(() => { /* Advice is a bonus; the threshold alerts above still stand. */ })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [wardId, active]);
+  return { text, loading };
+}
+
 function Dashboard({ onNavigate, locations, view }: {
   onNavigate: (path: string) => void; locations: ReturnType<typeof useLocations>; view: string;
 }) {
@@ -53,6 +77,7 @@ function Dashboard({ onNavigate, locations, view }: {
     };
   }, []);
   const [logoutError, setLogoutError] = useState("");
+  const advice = useAdvice(locations.effectiveWardId, view === "/alerts");
   const { event, forecast, forecastError,
     forecastLoading, forecastStale, requestForecast, status, error, stale, offline } = useWeather(
     locations.effectiveWardId,
@@ -132,6 +157,15 @@ function Dashboard({ onNavigate, locations, view }: {
         {!locations.provinceLoading && !locations.error && !locations.provinces.length &&
           <p className="notice" role="status">Chưa có danh mục tỉnh/thành phố.</p>}
         {error && <p className="notice" role="status">{error}</p>}
+        {view === "/chat" ? (account
+          ? <ChatPage token={account.access_token} />
+          : <section className="glass" aria-live="polite">
+              <h2><span aria-hidden="true">✨</span> Trợ lý thời tiết</h2>
+              <p>Cần đăng nhập để dùng trợ lý, vì mỗi tài khoản có hạn mức câu hỏi riêng.</p>
+              <button type="button" className="catalog-retry"
+                onClick={() => onNavigate("/login")}>Đăng nhập</button>
+            </section>
+        ) : (
         <div className={`dashboard ${view === "/alerts" ? "single-page" : ""}`}>
           {view !== "/alerts" && <>
           <section className="glass current" aria-label="Thời tiết hiện tại">
@@ -171,8 +205,16 @@ function Dashboard({ onNavigate, locations, view }: {
             <h2><span aria-hidden="true">⚠</span> Cảnh báo thời tiết</h2>
             {!event ? <p>Chưa có dữ liệu để đánh giá.</p> : !event.alerts.length ? <p>Chưa ghi nhận chỉ số vượt ngưỡng.</p> : event.alerts.map((alert) => <p className="alert" key={alert.code}>{alert.message}</p>)}
             <small>Ngưỡng demo · Không thay thế cảnh báo khí tượng chính thức</small>
+            {/* Kept visually separate: thresholds above are fixed rules, this part is generated. */}
+            {(advice.loading || advice.text) && <div className="advice">
+              <h3><span aria-hidden="true">✨</span> Gợi ý hôm nay</h3>
+              {advice.loading
+                ? <p role="status">Đang hỏi trợ lý…</p>
+                : <p>{advice.text}</p>}
+              {advice.text && <small>Gemini tổng hợp từ Open-Meteo: nhiệt độ cảm nhận, UV, chất lượng không khí, gió giật · Không phải cảnh báo chính thức</small>}
+            </div>}
           </section>
-        </div>
+        </div>)}
         <footer><p>Nguồn: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · Mưa quy đổi theo kỳ tích lũy sang mm/h.</p><p>Weather Stream · Giờ Việt Nam (UTC+7)</p><p>Nền minh họa theo thời tiết và giờ Việt Nam · Không phải ảnh trực tiếp</p></footer>
       </main>
     </div>

@@ -52,4 +52,16 @@ public final class WeatherDto {
   public record Alert(String code, String severity, String message) {}
 
   public record WeatherEvent(String type, ObservationResponse observation, List<Alert> alerts) {}
+
+  /**
+   * Clothing and protection advice written by Gemini from tool data. {@code available} is false
+   * when the assistant is not configured or upstream is down, so the UI can simply hide the block
+   * instead of showing an error.
+   */
+  public record AdviceResponse(
+      boolean available, String advice, String reason, Instant generatedAt) {
+    public static AdviceResponse unavailable(String reason) {
+      return new AdviceResponse(false, null, reason, null);
+    }
+  }
 }

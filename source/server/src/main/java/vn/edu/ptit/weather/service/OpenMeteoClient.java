@@ -33,8 +33,17 @@ public class OpenMeteoClient {
   }
 
   public JsonNode fetch(double latitude, double longitude, Map<String, String> options) {
+    return fetch(baseUrl, latitude, longitude, options);
+  }
+
+  /**
+   * Same transport against a different Open-Meteo host, so the air-quality endpoint reuses the
+   * bounded body, concurrency limit and timeout handling instead of duplicating them.
+   */
+  public JsonNode fetch(
+      String endpoint, double latitude, double longitude, Map<String, String> options) {
     JsonNode result =
-        fetchCoordinates(Double.toString(latitude), Double.toString(longitude), options);
+        fetchCoordinates(endpoint, Double.toString(latitude), Double.toString(longitude), options);
     if (!result.isObject()) throw new ApiException(503, "Dữ liệu Open-Meteo không hợp lệ.");
     return result;
   }
@@ -51,7 +60,7 @@ public class OpenMeteoClient {
         wards.stream()
             .map(w -> w.getLongitude().toPlainString())
             .collect(java.util.stream.Collectors.joining(","));
-    var result = fetchCoordinates(lat, lon, options);
+    var result = fetchCoordinates(baseUrl, lat, lon, options);
     var rows = new ArrayList<JsonNode>();
     if (result.isArray()) result.forEach(rows::add);
     else rows.add(result);
@@ -61,7 +70,7 @@ public class OpenMeteoClient {
   }
 
   private JsonNode fetchCoordinates(
-      String latitude, String longitude, Map<String, String> options) {
+      String endpoint, String latitude, String longitude, Map<String, String> options) {
     var params = new LinkedHashMap<String, String>();
     params.put("latitude", latitude);
     params.put("longitude", longitude);
@@ -84,7 +93,7 @@ public class OpenMeteoClient {
       acquired = slots.tryAcquire(2, java.util.concurrent.TimeUnit.SECONDS);
       if (!acquired) throw new ApiException(503, "Hàng đợi Open-Meteo đang đầy.");
       var request =
-          HttpRequest.newBuilder(URI.create(baseUrl + "?" + query))
+          HttpRequest.newBuilder(URI.create(endpoint + "?" + query))
               .timeout(timeout)
               .header("User-Agent", "WeatherStream-Education/1.0")
               .GET()

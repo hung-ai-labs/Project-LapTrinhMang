@@ -25,3 +25,29 @@ CREATE TABLE IF NOT EXISTS observations (
 CREATE INDEX IF NOT EXISTS ix_wards_province_name ON wards(province_id,name);
 CREATE INDEX IF NOT EXISTS ix_users_default_ward_id ON users(default_ward_id);
 CREATE INDEX IF NOT EXISTS ix_observations_ward_time ON observations(ward_id,source,observed_at);
+
+-- Gemini assistant: one row per chat thread, message history replayed as model context.
+CREATE TABLE IF NOT EXISTS chat_conversations (
+ id varchar(36) PRIMARY KEY, user_id varchar(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ title varchar(200) NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS chat_messages (
+ id varchar(36) PRIMARY KEY,
+ conversation_id varchar(36) NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+ role varchar(16) NOT NULL, content text NOT NULL, citations text,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ CHECK (role IN ('user','model'))
+);
+CREATE INDEX IF NOT EXISTS ix_chat_conversations_user ON chat_conversations(user_id,updated_at);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_conversation ON chat_messages(conversation_id,created_at);
+
+-- Retrieval over the project's own research reports. Requires pgvector (Neon ships 0.8).
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE TABLE IF NOT EXISTS doc_chunks (
+ id varchar(36) PRIMARY KEY, source_path varchar(500) NOT NULL, heading varchar(300),
+ chunk_index integer NOT NULL, content text NOT NULL, content_hash varchar(64) NOT NULL UNIQUE,
+ embedding vector(768) NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_doc_chunks_source ON doc_chunks(source_path,chunk_index);

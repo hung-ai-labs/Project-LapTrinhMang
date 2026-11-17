@@ -209,3 +209,9 @@ footer p { margin: 4px 0; }
 .dashboard.single-page { grid-template-columns: minmax(0, 1fr); }
 @media(max-width:1000px) { .page-tabs { order: 3; flex-basis: 100%; justify-content: center; } }
 @media(max-width:520px) { .page-tabs { gap: 0; justify-content: space-between; } .page-tabs a { font-size: .8125rem; padding: 9px 7px; } }
+
+/* AI advice sits inside the alerts card but must not look like a fixed-threshold warning. */
+.advice { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.advice h3 { font-size: .8125rem; font-weight: 500; color: var(--muted); margin: 0 0 8px; }
+.advice h3 > span { margin-right: 4px; }
+.advice p { font-size: .875rem; line-height: 1.6; margin: 0 0 8px; }

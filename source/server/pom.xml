@@ -99,6 +99,12 @@
           <include>manifest.json</include>
         </includes>
       </resource>
+      <!-- React build, so one jar serves the UI too. Maven skips this silently when the
+           directory is absent, which keeps `mvn package` working before `npm run build`. -->
+      <resource>
+        <directory>../client/dist</directory>
+        <targetPath>static</targetPath>
+      </resource>
     </resources>
     <plugins>
       <plugin>

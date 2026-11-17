@@ -29,7 +29,8 @@ public class JwtFilter extends OncePerRequestFilter {
     boolean protectedRoute =
         path.equals("/api/v1/auth/me")
             || path.equals("/api/v1/auth/logout")
-            || path.startsWith("/api/v1/users/");
+            || path.startsWith("/api/v1/users/")
+            || path.startsWith("/api/v1/chat/");
     if (!protectedRoute || request.getMethod().equals("OPTIONS")) {
       chain.doFilter(request, response);
       return;

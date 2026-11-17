@@ -14,6 +14,7 @@ public class WeatherController {
   private final CurrentWeatherService current;
   private final ForecastService forecasts;
   private final ObservationService observations;
+  private final AdviceService advice;
 
   @Value("${weather.source}")
   private String source;
@@ -30,6 +31,13 @@ public class WeatherController {
       @RequestParam(defaultValue = "1") int page,
       @RequestParam(name = "page_size", defaultValue = "25") int size) {
     return ApiResponse.ok(observations.history(id, source, page, size));
+  }
+
+  /** Public like the rest of the weather data; the Gemini key never leaves the server. */
+  @GetMapping("/wards/{id}/weather/advice")
+  public ApiResponse<?> advice(@PathVariable String id, HttpServletResponse response) {
+    response.setHeader("Cache-Control", "no-store");
+    return ApiResponse.ok(advice.advice(id));
   }
 
   @GetMapping("/wards/{id}/weather/forecast")
