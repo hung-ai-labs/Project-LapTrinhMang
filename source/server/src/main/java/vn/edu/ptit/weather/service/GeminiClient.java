@@ -23,7 +23,12 @@ public class GeminiClient {
   private static final int MAX_ANSWER_CHARS = 32_000;
 
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-  private static final Duration STREAM_TIMEOUT = Duration.ofSeconds(90);
+  /**
+   * How long one candidate may take to return response headers. A streaming endpoint answers these
+   * within seconds, so a longer wait only means that model is wedged — and waiting past the total
+   * budget would strand the request on it while a healthy model sits further down the chain.
+   */
+  private static final Duration RESPONSE_HEADER_TIMEOUT = Duration.ofSeconds(12);
   private static final Duration EMBED_TIMEOUT = Duration.ofSeconds(30);
 
   /** Must stay well under the SSE emitter timeout so the client still receives an error event. */
@@ -60,6 +65,12 @@ public class GeminiClient {
     this.models = List.copyOf(candidates);
     this.embedModel = embedModel;
     this.embedDimensions = embedDimensions;
+    if (!configured())
+      org.slf4j.LoggerFactory.getLogger(getClass())
+          .warn(
+              "GEMINI_API_KEY is empty, so chat and advisory stay disabled. .env is resolved"
+                  + " against the working directory, which is {}",
+              java.nio.file.Path.of("").toAbsolutePath());
   }
 
   public boolean configured() {
@@ -90,38 +101,52 @@ public class GeminiClient {
    */
   public Turn streamTurn(
       ArrayNode contents, ArrayNode tools, String systemInstruction, Consumer<String> onDelta) {
-    // The HTTP status is checked before any delta is emitted, so retrying here can never replay
-    // text the client already saw. Overload (503) and throttling (429) are both transient; a
-    // retired model (404) is permanent, so move straight to the next candidate.
-    long[] backoffMillis = {1_000, 3_000, 8_000};
+    // Every candidate is tried once before any sleeping. A 503 means that one model is saturated,
+    // and the next candidate normally answers straight away, so spending the budget on backoff for
+    // the primary would strand the request while a working model sits further down the list.
+    // The HTTP status is checked before any delta is emitted, so a retry can never replay text the
+    // client already saw.
+    long[] roundPauseMillis = {0, 1_000, 3_000, 8_000};
     // Retries and fallbacks share one budget: the SSE response must finish before its own
     // timeout, otherwise the client is dropped with no answer at all.
     long deadline = System.nanoTime() + TOTAL_ATTEMPT_BUDGET.toNanos();
+    var logger = org.slf4j.LoggerFactory.getLogger(getClass());
+    var live = new ArrayList<>(models);
     ApiException last = null;
-    for (String model : models) {
-      for (int attempt = 0; ; attempt++) {
-        if (System.nanoTime() > deadline) {
-          throw last == null ? new ApiException(503, "Gemini chưa sẵn sàng.") : last;
-        }
+    for (long pause : roundPauseMillis) {
+      if (live.isEmpty()) break;
+      if (pause > 0) {
+        logger.warn("All {} Gemini models busy, waiting {} ms before another sweep", live.size(), pause);
         try {
-          return streamOnce(model, contents, tools, systemInstruction, onDelta);
-        } catch (ApiException e) {
-          last = e;
-          if (e.getStatus() == 404) break;
-          boolean retryable = e.getStatus() == 503 || e.getStatus() == 429;
-          if (!retryable) throw e;
-          if (attempt >= backoffMillis.length) break;
-          org.slf4j.LoggerFactory.getLogger(getClass())
-              .warn("Gemini {} busy, retrying in {} ms", model, backoffMillis[attempt]);
-          try {
-            Thread.sleep(backoffMillis[attempt]);
-          } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new ApiException(503, "Đã hủy yêu cầu tới Gemini.");
-          }
+          Thread.sleep(pause);
+        } catch (InterruptedException interrupted) {
+          Thread.currentThread().interrupt();
+          throw new ApiException(503, "Đã hủy yêu cầu tới Gemini.");
         }
       }
-      org.slf4j.LoggerFactory.getLogger(getClass()).warn("Gemini {} unavailable, trying next", model);
+      for (var candidate = live.iterator(); candidate.hasNext(); ) {
+        String model = candidate.next();
+        Duration remaining = Duration.ofNanos(deadline - System.nanoTime());
+        if (remaining.isNegative() || remaining.isZero()) {
+          throw last == null ? new ApiException(503, "Gemini chưa sẵn sàng.") : last;
+        }
+        Duration attemptTimeout =
+            remaining.compareTo(RESPONSE_HEADER_TIMEOUT) < 0 ? remaining : RESPONSE_HEADER_TIMEOUT;
+        try {
+          return streamOnce(model, contents, tools, systemInstruction, onDelta, attemptTimeout);
+        } catch (ApiException e) {
+          last = e;
+          // A retired model will not come back during this request; stop offering it.
+          if (e.getStatus() == 404) {
+            logger.warn("Gemini {} is not available to this key (404), dropping it", model);
+            candidate.remove();
+            continue;
+          }
+          boolean retryable = e.getStatus() == 503 || e.getStatus() == 429;
+          if (!retryable) throw e;
+          logger.warn("Gemini {} unavailable ({}), trying next", model, e.getStatus());
+        }
+      }
     }
     throw last == null ? new ApiException(503, "Gemini chưa sẵn sàng.") : last;
   }
@@ -131,7 +156,8 @@ public class GeminiClient {
       ArrayNode contents,
       ArrayNode tools,
       String systemInstruction,
-      Consumer<String> onDelta) {
+      Consumer<String> onDelta,
+      Duration attemptTimeout) {
     requireConfigured();
     ObjectNode body = json.createObjectNode();
     body.set("contents", contents);
@@ -157,7 +183,7 @@ public class GeminiClient {
       var request =
           HttpRequest.newBuilder(
                   URI.create(baseUrl + "/models/" + model + ":streamGenerateContent?alt=sse"))
-              .timeout(STREAM_TIMEOUT)
+              .timeout(attemptTimeout)
               // Key travels in a header, never in the URL, so it cannot leak through access logs.
               .header("x-goog-api-key", apiKey)
               .header("Content-Type", "application/json")

@@ -137,6 +137,14 @@ class ChatParityTest {
   }
 
   @Test
+  void narrowsToTheWardWhenTheProvinceIsSpelledOutToo() {
+    // "Ngọc Hà, Hà Nội" must not fall back to every ward of Hà Nội.
+    var result = findWardTool().execute(json.createObjectNode().put("query", "Ngọc Hà, Hà Nội"));
+    assertThat(result.payload().path("count").asInt()).isEqualTo(1);
+    assertThat(result.payload().path("wards").path(0).path("ward_id").asText()).isEqualTo("00007");
+  }
+
+  @Test
   void reportsNoMatchInsteadOfGuessing() {
     var result = findWardTool().execute(json.createObjectNode().put("query", "không có thật"));
     assertThat(result.payload().path("count").asInt()).isZero();

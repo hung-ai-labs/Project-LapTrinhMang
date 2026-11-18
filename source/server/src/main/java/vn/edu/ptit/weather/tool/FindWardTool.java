@@ -32,7 +32,10 @@ public class FindWardTool implements ChatTool {
     ObjectNode properties = json.createObjectNode();
     properties.set(
         "query",
-        Schemas.string(json, "Tên phường/xã hoặc tỉnh/thành người dùng nhắc tới, ví dụ 'Hà Nội'."));
+        Schemas.string(
+            json,
+            "Tên phường/xã và/hoặc tỉnh/thành người dùng nhắc tới. Có thể ghi cả hai, phân cách"
+                + " bằng dấu phẩy, ví dụ 'Ba Đình, Hà Nội' hoặc chỉ 'Hà Nội'."));
     return Schemas.declaration(
         json,
         name(),
@@ -46,22 +49,49 @@ public class FindWardTool implements ChatTool {
     if (query.isBlank())
       return Result.of(json.createObjectNode().put("error", "Thiếu tên địa danh cần tìm."));
 
-    String needle = fold(query);
+    // People write the place the way they say it — "Ba Đình, Hà Nội" — so each comma-separated
+    // part is matched on its own and a ward that also matches the province part wins.
+    var parts = new ArrayList<String>();
+    for (String part : query.split("[,/]")) {
+      String folded = fold(part);
+      if (!folded.isBlank()) parts.add(folded);
+    }
+    if (parts.isEmpty())
+      return Result.of(json.createObjectNode().put("error", "Thiếu tên địa danh cần tìm."));
+
     var provinces = new HashMap<String, String>();
     for (var province : geography.provinces().rows())
       provinces.put(province.getId(), province.getName());
 
+    // Ranked buckets, best first: an exact ward name backed by the right province beats a loose
+    // substring, which in turn beats "every ward of this province".
+    var exactInProvince = new ArrayList<Ward>();
     var exact = new ArrayList<Ward>();
+    var partialInProvince = new ArrayList<Ward>();
     var partial = new ArrayList<Ward>();
+    var provinceOnly = new ArrayList<Ward>();
     for (Ward ward : geography.wards(null).rows()) {
       String wardName = fold(ward.getName());
       String provinceName = fold(provinces.getOrDefault(ward.getProvinceId(), ""));
-      if (wardName.equals(needle)) exact.add(ward);
-      else if (wardName.contains(needle) || provinceName.equals(needle)) partial.add(ward);
-      if (exact.size() >= MAX_RESULTS) break;
+      boolean isExact = false;
+      boolean isPartial = false;
+      boolean inProvince = false;
+      for (String part : parts) {
+        if (wardName.equals(part)) isExact = true;
+        else if (wardName.contains(part)) isPartial = true;
+        if (provinceName.equals(part)) inProvince = true;
+      }
+      if (isExact) (inProvince ? exactInProvince : exact).add(ward);
+      else if (isPartial) (inProvince ? partialInProvince : partial).add(ward);
+      else if (inProvince) provinceOnly.add(ward);
     }
 
-    var matches = exact.isEmpty() ? partial : exact;
+    var matches =
+        List.<List<Ward>>of(exactInProvince, exact, partialInProvince, partial, provinceOnly)
+            .stream()
+        .filter(bucket -> !bucket.isEmpty())
+        .findFirst()
+        .orElseGet(List::of);
     var results = json.createArrayNode();
     for (Ward ward : matches.stream().limit(MAX_RESULTS).toList()) {
       ObjectNode row = json.createObjectNode();

@@ -39,7 +39,12 @@ public class ChatController {
           },
           new ThreadPoolExecutor.AbortPolicy());
 
-  private static final long STREAM_TIMEOUT_MS = 120_000;
+  /**
+   * Must outlast the worst case inside ChatService: up to four model turns, each of which may burn
+   * its own retry budget sweeping saturated models. Timing out here instead would drop the client
+   * with nothing, after it had already waited.
+   */
+  private static final long STREAM_TIMEOUT_MS = 300_000;
 
   private final ChatService chat;
   private final AuthService auth;
